@@ -6,10 +6,10 @@ echo Adding all files...
 git add .
 
 echo Committing changes...
-git commit -m "Initial commit: Complete AI Sales Agent platform with frontend, backend, and deployment configurations"
+git commit -m "Complete AI Sales Agent platform - all files"
 
-echo Pushing to GitHub...
-git push -u origin main
+echo Pushing to GitHub on master branch...
+git push -u origin master
 
 echo Done!
 pause 
