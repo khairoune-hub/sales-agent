@@ -1,0 +1,17 @@
+{
+  "name": "x-company-bio-products-frontend",
+  "version": "1.0.0",
+  "description": "X Company Bio Products Frontend - Static Site for Vercel",
+  "scripts": {
+    "build": "echo 'Static site - no build required'",
+    "start": "echo 'Static site deployed to Vercel'"
+  },
+  "keywords": [
+    "bio-products",
+    "frontend",
+    "vercel",
+    "static-site"
+  ],
+  "author": "X Company",
+  "license": "MIT"
+} 

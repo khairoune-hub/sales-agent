@@ -1,0 +1,29 @@
+# Exclude everything except public folder contents
+*
+!public/
+!vercel.json
+
+# Exclude backend files
+src/
+node_modules/
+credentials/
+.dev.vars
+wrangler.toml
+package.json
+package-lock.json
+
+# Exclude development files
+*.log
+*.md
+*.bat
+worker.js
+openai_sales_agent.js
+serve-frontend.js
+
+# Exclude git and IDE files
+.git/
+.vscode/
+.idea/
+
+# Keep only HTML files and vercel.json
+# (HTML files are now in root directory) 

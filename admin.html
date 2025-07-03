@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X Company Produits Bio - Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2D7D32, #4CAF50);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .backend-info {
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .admin-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .admin-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #2D7D32;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1B5E20;
+        }
+
+        .btn-secondary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #388E3C;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #f57c00;
+        }
+
+        .chat-box {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: #2D7D32;
+            color: white;
+            padding: 15px 20px;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .connection-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .connection-status.connected {
+            background: #4CAF50;
+        }
+
+        .connection-status.disconnected {
+            background: #f44336;
+        }
+
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+        }
+
+        .message.user {
+            text-align: right;
+        }
+
+        .message-content {
+            display: inline-block;
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-content {
+            background: #2D7D32;
+            color: white;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .chat-input {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .chat-input input:focus {
+            outline: none;
+            border-color: #2D7D32;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #ddd;
+            border-radius: 50%;
+            border-top-color: #2D7D32;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .config-panel {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .admin-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌿 X Company Produits Bio</h1>
+            <p>Interface d'Administration</p>
+            <div class="backend-info">
+                Backend API: <span id="backendUrl">https://x-company-bio-products.bcos-assistant.workers.dev</span>
+            </div>
+        </div>
+
+        <div class="config-panel">
+            <h3>⚙️ Configuration Backend</h3>
+            <label>URL du Backend API:</label>
+            <input type="text" id="backendUrlInput" class="config-input" value="https://x-company-bio-products.bcos-assistant.workers.dev" placeholder="http://localhost:3000">
+            <button class="btn btn-warning" onclick="updateBackendUrl()">Mettre à jour</button>
+            <button class="btn btn-secondary" onclick="testConnection()">Tester Connexion</button>
+        </div>
+
+        <div class="admin-panel">
+            <h3 style="margin-bottom: 15px;">Actions Rapides</h3>
+            <div class="admin-buttons">
+                <button class="btn btn-secondary" onclick="chatUI.sendMessage('Montrer tous les produits bio')">
+                    📦 Voir Produits
+                </button>
+               
+                <button class="btn btn-primary" onclick="chatUI.generateSalesReport()">
+                    📊 Rapport Ventes
+                </button>
+
+                <button class="btn btn-warning" onclick="testEnvironment()">
+                    🧪 Test Environnement
+                </button>
+            </div>
+        </div>
+
+        <div class="chat-box">
+            <div class="chat-header">
+                <span>Assistant Produits Bio</span>
+                <span class="connection-status" id="connectionStatus">Déconnecté</span>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="message assistant">
+                    <div class="message-content">
+🌿 Bienvenue dans l'interface d'administration X Company Produits Bio !
+
+Je peux vous aider avec :
+• Voir l'inventaire des produits
+• Vérifier les niveaux de stock  
+• Générer des rapports de ventes
+• Gérer les commandes
+
+Que souhaitez-vous faire ?
+                    </div>
+                </div>
+            </div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <span id="loadingText">Traitement en cours...</span>
+            </div>
+
+            <div class="chat-input">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    placeholder="Tapez votre message..."
+                    onkeypress="if(event.key==='Enter') chatUI.sendUserMessage()"
+                >
+                <button class="btn btn-primary" onclick="chatUI.sendUserMessage()">
+                    Envoyer
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        let BACKEND_URL = 'https://x-company-bio-products.bcos-assistant.workers.dev';
+
+        function updateBackendUrl() {
+            const newUrl = document.getElementById('backendUrlInput').value.trim();
+            if (newUrl) {
+                BACKEND_URL = newUrl;
+                document.getElementById('backendUrl').textContent = BACKEND_URL;
+                updateConnectionStatus('disconnected');
+                console.log('Backend URL updated to:', BACKEND_URL);
+            }
+        }
+
+        function updateConnectionStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = `connection-status ${status}`;
+            statusEl.textContent = status === 'connected' ? 'Connecté' : 'Déconnecté';
+        }
+
+        async function testConnection() {
+            try {
+                console.log('Testing connection to:', BACKEND_URL);
+                const response = await fetch(`${BACKEND_URL}/api/test-env`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateConnectionStatus('connected');
+                    alert(`✅ Connexion réussie!\n\nEnvironnement:\n- OpenAI: ${data.environment.hasOpenAI ? '✅' : '❌'}\n- Google Sheets: ${data.environment.hasSheetId ? '✅' : '❌'}\n- Service Account: ${data.environment.hasServiceAccount ? '✅' : '❌'}`);
+                } else {
+                    updateConnectionStatus('disconnected');
+                    alert('❌ Erreur de connexion: ' + data.error);
+                }
+            } catch (error) {
+                updateConnectionStatus('disconnected');
+                alert('❌ Impossible de se connecter au backend: ' + error.message);
+            }
+        }
+
+        async function testEnvironment() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/test-env`);
+                const data = await response.json();
+                console.log('Environment test:', data);
+                
+                if (response.ok) {
+                    alert(`🧪 Test d'environnement:\n\n✅ Backend connecté\n- OpenAI API: ${data.environment.hasOpenAI ? '✅ Configuré' : '❌ Manquant'}\n- Google Sheets ID: ${data.environment.hasSheetId ? '✅ Configuré' : '❌ Manquant'}\n- Service Account: ${data.environment.hasServiceAccount ? '✅ Configuré' : '❌ Manquant'}\n- Private Key: ${data.environment.hasPrivateKey ? '✅ Configuré' : '❌ Manquant'}`);
+                } else {
+                    alert('❌ Erreur lors du test: ' + (data.error || 'Erreur inconnue'));
+                }
+            } catch (error) {
+                alert('❌ Erreur de connexion: ' + error.message);
+            }
+        }
+
+        class ChatUI {
+            constructor() {
+                this.threadId = null;
+                this.isInitialized = false;
+                this.isLoading = false;
+                this.init();
+            }
+
+            async init() {
+                try {
+                    await this.initializeAssistant();
+                    await this.createThread();
+                    this.isInitialized = true;
+                    updateConnectionStatus('connected');
+                    console.log('✅ Chat initialized successfully');
+                } catch (error) {
+                    console.error('❌ Initialization error:', error);
+                    updateConnectionStatus('disconnected');
+                    this.addMessage('Erreur d\'initialisation. Vérifiez la configuration du backend.', 'assistant');
+                }
+            }
+
+            async initializeAssistant() {
+                const response = await fetch(`${BACKEND_URL}/api/chat/initialize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                return response.json();
+            }
+
+            async createThread() {
+                const response = await fetch(`${BACKEND_URL}/api/chat/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                const data = await response.json();
+                this.threadId = data.data.threadId;
+            }
+
+            async sendUserMessage() {
+                const input = document.getElementById('messageInput');
+                const message = input.value.trim();
+                
+                if (!message || this.isLoading) return;
+                
+                input.value = '';
+                this.addMessage(message, 'user');
+                await this.sendMessage(message);
+            }
+
+            async sendMessage(message, userType = null) {
+                if (!this.isInitialized || this.isLoading) {
+                    console.log('Cannot send message:', { initialized: this.isInitialized, loading: this.isLoading });
+                    return;
+                }
+                
+                this.setLoading(true, 'Envoi du message...');
+                
+                try {
+                    const requestBody = {
+                        threadId: this.threadId,
+                        message: message
+                    };
+                    
+                    if (userType) requestBody.userType = userType;
+                    
+                    // Progressive loading messages
+                    if (message.toLowerCase().includes('rapport') || message.toLowerCase().includes('sales')) {
+                        this.setLoading(true, 'Génération du rapport... 0%');
+                        setTimeout(() => this.setLoading(true, 'Analyse des données... 30%'), 300);
+                        setTimeout(() => this.setLoading(true, 'Calcul des métriques... 60%'), 800);
+                        setTimeout(() => this.setLoading(true, 'Finalisation... 90%'), 1500);
+                    } else if (message.toLowerCase().includes('produits')) {
+                        this.setLoading(true, 'Chargement des produits bio...');
+                    } else {
+                        this.setLoading(true, 'Traitement de votre demande...');
+                    }
+                    
+                    const response = await fetch(`${BACKEND_URL}/api/chat/message`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    });
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${errorText}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.data && data.data.aiResponse) {
+                        this.addMessage(data.data.aiResponse, 'assistant');
+                        updateConnectionStatus('connected');
+                    } else {
+                        this.addMessage('Aucune réponse reçue du serveur.', 'assistant');
+                    }
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    updateConnectionStatus('disconnected');
+                    this.addMessage(`Erreur: ${error.message}. Vérifiez la connexion au backend.`, 'assistant');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+
+            async generateSalesReport() {
+                await this.sendMessage('Générer rapport de ventes', 'admin');
+            }
+
+            addMessage(content, sender) {
+                const container = document.getElementById('chatMessages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.textContent = content;
+                
+                messageDiv.appendChild(contentDiv);
+                container.appendChild(messageDiv);
+                
+                if (sender === 'user') {
+                    container.scrollTop = container.scrollHeight;
+                } else if (sender === 'assistant') {
+                    messageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }
+
+            setLoading(loading, status = null) {
+                this.isLoading = loading;
+                const loadingEl = document.getElementById('loading');
+                const loadingTextEl = document.getElementById('loadingText');
+                
+                loadingEl.classList.toggle('show', loading);
+                
+                if (loading && status) {
+                    loadingTextEl.textContent = status;
+                } else if (loading) {
+                    loadingTextEl.textContent = 'Traitement en cours...';
+                }
+            }
+        }
+
+        const chatUI = new ChatUI();
+
+        // Auto-test connection on load
+        window.addEventListener('load', () => {
+            setTimeout(testConnection, 1000);
+        });
+    </script>
+</body>
+</html> 

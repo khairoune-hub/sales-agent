@@ -1,0 +1,85 @@
+{
+  "name": "x-company-bio-products",
+  "version": "2.0.0",
+  "description": "X Company Bio Products Sales Platform - Express Backend with Frontend Interfaces",
+  "type": "module",
+  "main": "backend/server.js",
+  "scripts": {
+    "dev": "nodemon backend/server.js",
+    "start": "node backend/server.js",
+    "frontend": "node serve-frontend.js",
+    "frontend:build": "echo 'Static frontend - no build needed'",
+    "frontend:deploy": "vercel --prod",
+    "dev:frontend": "node serve-frontend.js",
+    "dev:both": "concurrently \"npm run dev\" \"npm run frontend\"",
+    "build": "echo 'Frontend build complete'",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cloudflare:dev": "wrangler dev",
+    "cloudflare:deploy": "wrangler deploy"
+  },
+  "keywords": [
+    "bio-products",
+    "sales",
+    "openai",
+    "express",
+    "google-sheets",
+    "ecommerce"
+  ],
+  "author": "X Company",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "googleapis": "^128.0.0",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.20.1",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2",
+    "wrangler": "^3.15.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x-company/bio-products-platform"
+  },
+  "architecture": {
+    "backend": {
+      "platform": "Express.js Server",
+      "file": "backend/server.js",
+      "api": "REST API for bio products and orders",
+      "features": [
+        "OpenAI Assistant Integration",
+        "Google Sheets Integration",
+        "Product Database",
+        "Order Management",
+        "Customer Management",
+        "Analytics & Reports",
+        "Rate Limiting & Security"
+      ]
+    },
+    "frontend": {
+      "type": "Static Files",
+      "directory": "public/",
+      "interfaces": [
+        "index.html - Landing Page",
+        "admin.html - Admin Interface",
+        "chat.html - Customer Chat Interface"
+      ],
+      "features": [
+        "Responsive Design",
+        "Multi-language Support (French/Arabic)",
+        "Real-time Chat",
+        "Backend Configuration"
+      ]
+    }
+  }
+}

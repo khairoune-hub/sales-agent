@@ -1,0 +1,31 @@
+name = "x-company-bio-products"
+main = "src/backend.js"
+compatibility_date = "2024-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+[env.production]
+name = "x-company-bio-products-prod"
+
+[env.staging]
+name = "x-company-bio-products-staging"
+
+# Environment variables (loaded from .dev.vars in development)
+[vars]
+# These will be overridden by .dev.vars in development
+GOOGLE_SHEET_ID = "1gQUIKFwP1zNLYOnF_3Gc4u9X9WnZSpsS9KT31sW2jjA"
+GOOGLE_SERVICE_ACCOUNT_EMAIL = "agent-v1@agent-sheet-v1.iam.gserviceaccount.com"
+
+# KV Namespaces for caching
+[[kv_namespaces]]
+binding = "CACHE"
+id = "9aa6aa3b4ed142ee9c096064b166cd6d"
+preview_id = "1734d35a8a3f45ff9cbe386ed845d7d7"
+
+# Build configuration
+[build]
+command = "npm run build"
+
+# Development configuration
+[dev]
+port = 8787
+local_protocol = "http" 

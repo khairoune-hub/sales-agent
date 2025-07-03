@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X Company Produits Bio - Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .chat-container {
+            width: 90%;
+            max-width: 800px;
+            height: 90vh;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .chat-header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        .chat-header p {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        .backend-info {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            font-size: 10px;
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            position: relative;
+            min-height: 0;
+            scroll-behavior: smooth;
+            border-top: 1px solid rgba(76, 175, 80, 0.1);
+            border-bottom: 1px solid rgba(76, 175, 80, 0.1);
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .chat-messages::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb {
+            background: #4CAF50;
+            border-radius: 3px;
+        }
+
+        .chat-messages::-webkit-scrollbar-thumb:hover {
+            background: #45a049;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.assistant {
+            justify-content: flex-start;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+
+        .message.user .message-content {
+            background: #007bff;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 5px;
+        }
+
+        .message-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            margin: 0 10px;
+        }
+
+        .message.user .message-avatar {
+            background: #007bff;
+            color: white;
+            order: 1;
+        }
+
+        .message.assistant .message-avatar {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 5;
+        }
+
+        .quick-messages {
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .quick-message-btn {
+            background: #f8f9fa;
+            border: 1px solid #4CAF50;
+            color: #4CAF50;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+
+        .quick-message-btn:hover {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus {
+            border-color: #4CAF50;
+        }
+
+        .send-button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .send-button:hover {
+            background: #45a049;
+        }
+
+        .send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4CAF50;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .welcome-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+        }
+
+        .welcome-message h2 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+
+        .language-selector {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .language-btn {
+            padding: 8px 16px;
+            border: 2px solid #4CAF50;
+            background: white;
+            color: #4CAF50;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .language-btn:hover,
+        .language-btn.active {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .standard-messages {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .standard-messages h3 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 1rem;
+        }
+
+        .standard-message-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+
+        .standard-message-btn {
+            background: white;
+            border: 1px solid #4CAF50;
+            color: #4CAF50;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .standard-message-btn:hover {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .config-section {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 12px;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 4px;
+            margin: 2px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .config-btn {
+            background: #ff9800;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                width: 95%;
+                height: 95vh;
+                border-radius: 10px;
+            }
+
+            .message-content {
+                max-width: 85%;
+            }
+
+            .chat-header h1 {
+                font-size: 1.3rem;
+            }
+
+            .quick-messages {
+                justify-content: flex-start;
+            }
+
+            .quick-message-btn {
+                font-size: 0.8rem;
+                padding: 6px 10px;
+            }
+
+            .standard-message-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="backend-info" id="backendInfo">API: x-company-bio-products.bcos-assistant.workers.dev</div>
+            <h1>🌿 X Company Produits Bio</h1>
+            <p>Votre assistant pour les produits biologiques et naturels</p>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <div class="welcome-message">
+                <h2>Bienvenue ! 🌿</h2>
+                <p>Je suis votre assistant pour X Company Produits Bio.</p>
+                <p>Je peux vous aider avec nos produits biologiques, prendre vos commandes et répondre à vos questions.</p>
+                
+                <div class="config-section">
+                    <strong>⚙️ Configuration Backend</strong><br>
+                    <input type="text" id="backendUrlInput" class="config-input" value="https://x-company-bio-products.bcos-assistant.workers.dev" placeholder="Backend URL">
+                    <button class="config-btn" onclick="updateBackendUrl()">Mettre à jour</button>
+                    <button class="config-btn" onclick="testConnection()">Test</button>
+                </div>
+                
+                <div class="language-selector">
+                    <button class="language-btn active" onclick="setLanguage('fr')">Français</button>
+                    <button class="language-btn" onclick="setLanguage('ar')">العربية</button>
+                </div>
+
+                <div class="standard-messages">
+                    <h3>Messages rapides ⚡</h3>
+                    <div class="standard-message-grid">
+                        <button class="standard-message-btn" onclick="sendQuickMessage('Montrez-moi tous vos produits bio')">
+                            📦 Voir tous les produits
+                        </button>
+                        <button class="standard-message-btn" onclick="sendQuickMessage('Quels sont vos suppléments disponibles?')">
+                            💊 Suppléments bio
+                        </button>
+                        <button class="standard-message-btn" onclick="sendQuickMessage('Montrez-moi vos produits alimentaires bio')">
+                            🍯 Aliments biologiques
+                        </button>
+                        <button class="standard-message-btn" onclick="sendQuickMessage('Avez-vous des thés et boissons bio?')">
+                            🍃 Thés & Boissons
+                        </button>
+                        <button class="standard-message-btn" onclick="sendQuickMessage('Quels sont vos prix?')">
+                            💰 Voir les prix
+                        </button>
+                        <button class="standard-message-btn" onclick="sendQuickMessage('Comment passer une commande?')">
+                            🛒 Passer commande
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <span id="loadingText">Traitement en cours...</span>
+        </div>
+
+        <div class="chat-input-container">
+            <div class="quick-messages" id="quickMessages">
+                <button class="quick-message-btn" onclick="sendQuickMessage('Bonjour')">👋 Bonjour</button>
+                <button class="quick-message-btn" onclick="sendQuickMessage('Produits bio')">🌿 Produits bio</button>
+                <button class="quick-message-btn" onclick="sendQuickMessage('Prix')">💰 Prix</button>
+                <button class="quick-message-btn" onclick="sendQuickMessage('Commander')">🛒 Commander</button>
+                <button class="quick-message-btn" onclick="sendQuickMessage('Aide')">❓ Aide</button>
+            </div>
+            
+            <div class="chat-input-wrapper">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    class="chat-input"
+                    placeholder="Tapez votre message..."
+                    onkeypress="if(event.key==='Enter') sendMessage()"
+                >
+                <button class="send-button" onclick="sendMessage()" id="sendButton">
+                    <span>Envoyer</span>
+                    <span>📤</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        let BACKEND_URL = 'https://x-company-bio-products.bcos-assistant.workers.dev';
+
+        function updateBackendUrl() {
+            const newUrl = document.getElementById('backendUrlInput').value.trim();
+            if (newUrl) {
+                BACKEND_URL = newUrl;
+                document.getElementById('backendInfo').textContent = `API: ${BACKEND_URL.replace('http://', '').replace('https://', '')}`;
+                console.log('Backend URL updated to:', BACKEND_URL);
+            }
+        }
+
+        async function testConnection() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/test-env`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(`✅ Connexion réussie!\n\nBackend: ${BACKEND_URL}\nOpenAI: ${data.environment.hasOpenAI ? '✅' : '❌'}\nGoogle Sheets: ${data.environment.hasSheetId ? '✅' : '❌'}`);
+                } else {
+                    alert('❌ Erreur de connexion: ' + (data.error || 'Erreur inconnue'));
+                }
+            } catch (error) {
+                alert('❌ Impossible de se connecter au backend: ' + error.message);
+            }
+        }
+
+        class ChatInterface {
+            constructor() {
+                this.threadId = null;
+                this.isInitialized = false;
+                this.isLoading = false;
+                this.currentLanguage = 'fr';
+                this.init();
+            }
+
+            async init() {
+                try {
+                    await this.initializeAssistant();
+                    await this.createThread();
+                    this.isInitialized = true;
+                    console.log('✅ Chat initialized successfully');
+                } catch (error) {
+                    console.error('❌ Initialization error:', error);
+                    this.addMessage('Erreur d\'initialisation. Vérifiez la configuration du backend.', 'assistant');
+                }
+            }
+
+            async initializeAssistant() {
+                const response = await fetch(`${BACKEND_URL}/api/chat/initialize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                return response.json();
+            }
+
+            async createThread() {
+                const response = await fetch(`${BACKEND_URL}/api/chat/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+                
+                const data = await response.json();
+                this.threadId = data.data.threadId;
+            }
+
+            async sendMessage() {
+                const input = document.getElementById('messageInput');
+                const message = input.value.trim();
+                
+                if (!message || this.isLoading || !this.isInitialized) return;
+                
+                input.value = '';
+                this.addMessage(message, 'user');
+                this.setLoading(true);
+                
+                try {
+                    const requestBody = {
+                        threadId: this.threadId,
+                        message: message
+                    };
+                    
+                    const response = await fetch(`${BACKEND_URL}/api/chat/message`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.data && data.data.response) {
+                        this.addMessage(data.data.response, 'assistant');
+                    } else if (data.success === false) {
+                        this.addMessage(`Erreur: ${data.message || data.error || 'Erreur inconnue'}`, 'assistant');
+                    } else {
+                        this.addMessage('Aucune réponse reçue du serveur.', 'assistant');
+                    }
+                } catch (error) {
+                    console.error('❌ Error sending message:', error);
+                    this.addMessage(`Erreur: ${error.message}. Vérifiez la connexion au backend.`, 'assistant');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+
+            addMessage(content, sender) {
+                const messagesContainer = document.getElementById('chatMessages');
+                
+                const welcomeMessage = messagesContainer.querySelector('.welcome-message');
+                if (welcomeMessage) {
+                    welcomeMessage.remove();
+                }
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+                
+                const avatar = document.createElement('div');
+                avatar.className = 'message-avatar';
+                avatar.textContent = sender === 'user' ? '👤' : '🌿';
+                
+                const messageContent = document.createElement('div');
+                messageContent.className = 'message-content';
+                messageContent.textContent = content;
+                
+                if (sender === 'user') {
+                    messageDiv.appendChild(messageContent);
+                    messageDiv.appendChild(avatar);
+                } else {
+                    messageDiv.appendChild(avatar);
+                    messageDiv.appendChild(messageContent);
+                }
+                
+                messagesContainer.appendChild(messageDiv);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            setLoading(loading, text = null) {
+                this.isLoading = loading;
+                const loadingEl = document.getElementById('loading');
+                const sendButton = document.getElementById('sendButton');
+                const messageInput = document.getElementById('messageInput');
+                
+                if (loading) {
+                    loadingEl.classList.add('show');
+                    sendButton.disabled = true;
+                    messageInput.disabled = true;
+                    
+                    if (text) {
+                        document.getElementById('loadingText').textContent = text;
+                    }
+                } else {
+                    loadingEl.classList.remove('show');
+                    sendButton.disabled = false;
+                    messageInput.disabled = false;
+                    messageInput.focus();
+                }
+            }
+        }
+
+        function setLanguage(lang) {
+            document.querySelectorAll('.language-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            if (lang === 'ar') {
+                document.querySelector('.chat-header h1').textContent = '🌿 شركة X للمنتجات الحيوية';
+                document.querySelector('.chat-header p').textContent = 'مساعدك للمنتجات العضوية والطبيعية';
+                document.getElementById('messageInput').placeholder = 'اكتب رسالتك...';
+                document.querySelector('.send-button span').textContent = 'إرسال';
+                
+                const quickMessages = document.getElementById('quickMessages');
+                quickMessages.innerHTML = `
+                    <button class="quick-message-btn" onclick="sendQuickMessage('مرحبا')">👋 مرحبا</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('منتجات حيوية')">🌿 منتجات حيوية</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('الأسعار')">💰 الأسعار</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('طلب')">🛒 طلب</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('مساعدة')">❓ مساعدة</button>
+                `;
+            } else {
+                document.querySelector('.chat-header h1').textContent = '🌿 X Company Produits Bio';
+                document.querySelector('.chat-header p').textContent = 'Votre assistant pour les produits biologiques et naturels';
+                document.getElementById('messageInput').placeholder = 'Tapez votre message...';
+                document.querySelector('.send-button span').textContent = 'Envoyer';
+                
+                const quickMessages = document.getElementById('quickMessages');
+                quickMessages.innerHTML = `
+                    <button class="quick-message-btn" onclick="sendQuickMessage('Bonjour')">👋 Bonjour</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('Produits bio')">🌿 Produits bio</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('Prix')">💰 Prix</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('Commander')">🛒 Commander</button>
+                    <button class="quick-message-btn" onclick="sendQuickMessage('Aide')">❓ Aide</button>
+                `;
+            }
+        }
+
+        function sendQuickMessage(message) {
+            const input = document.getElementById('messageInput');
+            input.value = message;
+            sendMessage();
+        }
+
+        function sendMessage() {
+            chatInterface.sendMessage();
+        }
+
+        const chatInterface = new ChatInterface();
+
+        window.addEventListener('load', () => {
+            document.getElementById('messageInput').focus();
+        });
+    </script>
+</body>
+</html> 
