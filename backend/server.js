@@ -8,11 +8,11 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, readFileSync } from 'fs';
 
-// Load environment variables
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Load environment variables
+dotenv.config({ path: join(__dirname, '../.env') });
 
 // Environment Check Logging
 console.log('\n🔍 Environment Configuration Check:');
@@ -37,13 +37,38 @@ try {
         }
     }
     console.log(`   - OPENAI_MODEL: ${process.env.OPENAI_MODEL || 'gpt-4-turbo-preview'}`);
+    console.log(`   - ASSISTANT_ID: ${process.env.ASSISTANT_ID ? '✅ Set' : '❌ Missing'}`);
+    if (process.env.ASSISTANT_ID) {
+        console.log(`   - Assistant ID: ${process.env.ASSISTANT_ID}`);
+    }
 
     console.log('\n3. Google Sheets Configuration:');
     console.log(`   - GOOGLE_SHEETS_SPREADSHEET_ID: ${process.env.GOOGLE_SHEETS_SPREADSHEET_ID ? '✅ Set' : '❌ Missing'}`);
     console.log(`   - GOOGLE_SHEETS_PRIVATE_KEY: ${process.env.GOOGLE_SHEETS_PRIVATE_KEY ? '✅ Set' : '❌ Missing'}`);
     console.log(`   - GOOGLE_SHEETS_CLIENT_EMAIL: ${process.env.GOOGLE_SHEETS_CLIENT_EMAIL ? '✅ Set' : '❌ Missing'}`);
 
-    console.log('\n4. Service Account:');
+    console.log('\n4. Messenger Webhook Configuration:');
+    console.log(`   - MESSENGER_VERIFY_TOKEN: ${process.env.MESSENGER_VERIFY_TOKEN ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - MESSENGER_ACCESS_TOKEN: ${process.env.MESSENGER_ACCESS_TOKEN ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - MESSENGER_APP_SECRET: ${process.env.MESSENGER_APP_SECRET ? '✅ Set' : '❌ Missing'}`);
+    if (process.env.MESSENGER_ACCESS_TOKEN) {
+        console.log(`   - Access Token length: ${process.env.MESSENGER_ACCESS_TOKEN.length} characters`);
+    }
+
+    console.log('\n5. WhatsApp Business API Configuration:');
+    console.log(`   - WHATSAPP_VERIFY_TOKEN: ${process.env.WHATSAPP_VERIFY_TOKEN ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - WHATSAPP_ACCESS_TOKEN: ${process.env.WHATSAPP_ACCESS_TOKEN ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - WHATSAPP_APP_SECRET: ${process.env.WHATSAPP_APP_SECRET ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - WHATSAPP_PHONE_NUMBER_ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID ? '✅ Set' : '❌ Missing'}`);
+    console.log(`   - WHATSAPP_BUSINESS_ACCOUNT_ID: ${process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ? '✅ Set' : '❌ Missing'}`);
+    if (process.env.WHATSAPP_ACCESS_TOKEN) {
+        console.log(`   - WhatsApp Access Token length: ${process.env.WHATSAPP_ACCESS_TOKEN.length} characters`);
+    }
+    if (process.env.WHATSAPP_PHONE_NUMBER_ID) {
+        console.log(`   - Phone Number ID: ${process.env.WHATSAPP_PHONE_NUMBER_ID}`);
+    }
+
+    console.log('\n6. Service Account:');
     const serviceAccountPath = join(__dirname, '../credentials/service-account.json');
     if (existsSync(serviceAccountPath)) {
         try {
@@ -58,7 +83,7 @@ try {
         console.log('   - Service Account File: ❌ Not found');
     }
 
-    console.log('\n5. Environment File:');
+    console.log('\n7. Environment File:');
     const envPath = join(__dirname, '../.env');
     if (existsSync(envPath)) {
         try {
@@ -80,13 +105,22 @@ try {
         console.log('   - .env File: ❌ Not found');
     }
 
-    console.log('\n6. Environment Variables in Process:');
+    console.log('\n8. Environment Variables in Process:');
     const requiredVars = [
         'OPENAI_API_KEY',
         'OPENAI_MODEL',
+        'ASSISTANT_ID',
         'GOOGLE_SHEETS_SPREADSHEET_ID',
         'GOOGLE_SHEETS_PRIVATE_KEY',
-        'GOOGLE_SHEETS_CLIENT_EMAIL'
+        'GOOGLE_SHEETS_CLIENT_EMAIL',
+        'MESSENGER_VERIFY_TOKEN',
+        'MESSENGER_ACCESS_TOKEN',
+        'MESSENGER_APP_SECRET',
+        'WHATSAPP_VERIFY_TOKEN',
+        'WHATSAPP_ACCESS_TOKEN',
+        'WHATSAPP_APP_SECRET',
+        'WHATSAPP_PHONE_NUMBER_ID',
+        'WHATSAPP_BUSINESS_ACCOUNT_ID'
     ];
     requiredVars.forEach(varName => {
         const value = process.env[varName];
@@ -106,12 +140,14 @@ import customerRoutes from './routes/customers.js';
 import chatRoutes from './routes/chat.js';
 import analyticsRoutes from './routes/analytics.js';
 import adminRoutes from './routes/admin.js';
+import webhookRoutes from './routes/webhook.js';
+import whatsappRoutes from './routes/whatsapp.js';
 
 // Import services for initialization
 import { googleSheetsService } from './services/googleSheets.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.BACKEND_PORT || 8787;
 
 // Security middleware
 app.use(helmet({
@@ -179,7 +215,7 @@ app.use(limiter);
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
         ? ['https://yourdomain.com', 'https://www.yourdomain.com']
-        : ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:8080'],
+        : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:8080'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -230,11 +266,13 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/chat', chatLimiter, chatRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/webhook', webhookRoutes);
+app.use('/whatsapp', whatsappRoutes);
 
 // API Documentation endpoint
 app.get('/api', (req, res) => {
     res.json({
-        name: 'X Company Bio Products API',
+        name: 'Lingerie Store Products API',
         version: '2.0.0',
         description: 'Express.js backend for bio products sales platform',
         endpoints: {
@@ -273,6 +311,18 @@ app.get('/api', (req, res) => {
                 stats: 'GET /api/admin/stats',
                 config: 'GET /api/admin/config',
                 logs: 'GET /api/admin/logs'
+            },
+            webhook: {
+                messenger_verify: 'GET /webhook/messenger',
+                messenger_message: 'POST /webhook/messenger',
+                debug_sessions: 'GET /webhook/debug/sessions',
+                debug_config: 'GET /webhook/debug/config'
+            },
+            whatsapp: {
+                verify: 'GET /whatsapp/webhook',
+                message: 'POST /whatsapp/webhook',
+                debug_sessions: 'GET /whatsapp/debug/sessions',
+                debug_config: 'GET /whatsapp/debug/config'
             }
         },
         documentation: 'Visit /api for this documentation'
@@ -321,7 +371,7 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, async () => {
-    console.log(`🚀 X Company Bio Products Backend Server`);
+    console.log(`🚀 Lingerie Store Products Backend Server`);
     console.log(`📍 Server running on port ${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`📚 API Documentation: http://localhost:${PORT}/api`);

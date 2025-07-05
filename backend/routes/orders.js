@@ -1,95 +1,74 @@
 import express from 'express';
 import { dbUtils } from '../models/database.js';
 import { googleSheetsService } from '../services/googleSheets.js';
+import { orderService, customerService } from '../services/supabase.js';
 
 const router = express.Router();
 
-// POST /api/orders - Create a new order
+// POST /api/orders - Create a new order (enhanced with Supabase)
 router.post('/', async (req, res) => {
     try {
         const {
-            productId,
-            quantity,
+            items, // Array of {productId, quantity, variantId?}
             customerName,
             customerPhone,
             customerEmail,
+            platformType = 'web',
+            platformId,
             wilaya,
             address,
             notes
         } = req.body;
 
         // Validation
-        if (!productId || !quantity || !customerName || !customerPhone) {
+        if (!items || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
                 success: false,
                 error: 'Missing required fields',
-                message: 'productId, quantity, customerName, and customerPhone are required'
+                message: 'items array is required and must contain at least one item'
             });
         }
 
-        // Check if product exists and has sufficient stock
-        const product = dbUtils.getProductById(productId);
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                error: 'Product not found',
-                message: `Product with ID "${productId}" does not exist`
-            });
-        }
-
-        if (product.stock < quantity) {
+        if (!customerName || !customerPhone) {
             return res.status(400).json({
                 success: false,
-                error: 'Insufficient stock',
-                message: `Only ${product.stock} items available, but ${quantity} requested`
+                error: 'Missing required fields',
+                message: 'customerName and customerPhone are required'
             });
         }
 
-        // Calculate total amount
-        const unitPrice = product.price;
-        const totalAmount = unitPrice * quantity;
-
-        // Create or get customer
-        let customer = dbUtils.getCustomerByPhone(customerPhone);
-        if (!customer) {
-            customer = dbUtils.createCustomer({
-                name: customerName,
-                phone: customerPhone,
-                email: customerEmail,
-                wilaya,
-                address
-            });
-        } else {
-            // Update customer info if provided
-            customer = dbUtils.updateCustomer(customer.id, {
-                name: customerName,
-                email: customerEmail || customer.email,
-                wilaya: wilaya || customer.wilaya,
-                address: address || customer.address
-            });
+        // Validate items
+        for (const item of items) {
+            if (!item.productId || !item.quantity || item.quantity <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Invalid item data',
+                    message: 'Each item must have productId and quantity > 0'
+                });
+            }
         }
 
-        // Create order
-        const orderData = {
-            productId,
-            productName: product.name,
-            quantity: parseInt(quantity),
-            unitPrice,
-            totalAmount,
-            customerId: customer.id,
-            customerName,
-            customerPhone,
-            customerEmail,
+        // Prepare customer data
+        const customerData = {
+            platformId: platformId || customerPhone,
+            platformType,
+            name: customerName,
+            phone: customerPhone,
+            email: customerEmail,
             wilaya,
-            address,
-            notes,
-            status: 'pending'
+            address
         };
 
-        const order = dbUtils.createOrder(orderData);
+        // Prepare order data
+        const orderData = {
+            shippingAddress: address,
+            wilaya,
+            phone: customerPhone,
+            notes
+        };
 
-        // Update product stock
-        dbUtils.updateProductStock(productId, product.stock - quantity);
+        // Create order using Supabase service
+        const order = await orderService.createOrder(customerData, items, orderData);
 
         // Add to Google Sheets (if configured)
         try {
@@ -105,11 +84,114 @@ router.post('/', async (req, res) => {
         });
 
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create order',
-            message: error.message
-        });
+        console.error('Error creating order:', error);
+        
+        // Fallback to in-memory database for single-item orders
+        try {
+            const {
+                productId,
+                quantity,
+                customerName,
+                customerPhone,
+                customerEmail,
+                wilaya,
+                address,
+                notes
+            } = req.body;
+
+            // Only fallback if it's a single product order
+            if (productId && quantity && customerName && customerPhone) {
+                // Check if product exists and has sufficient stock
+                const product = dbUtils.getProductById(productId);
+                if (!product) {
+                    return res.status(404).json({
+                        success: false,
+                        error: 'Product not found',
+                        message: `Product with ID "${productId}" does not exist`
+                    });
+                }
+
+                if (product.stock < quantity) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Insufficient stock',
+                        message: `Only ${product.stock} items available, but ${quantity} requested`
+                    });
+                }
+
+                // Calculate total amount
+                const unitPrice = product.price;
+                const totalAmount = unitPrice * quantity;
+
+                // Create or get customer
+                let customer = dbUtils.getCustomerByPhone(customerPhone);
+                if (!customer) {
+                    customer = dbUtils.createCustomer({
+                        name: customerName,
+                        phone: customerPhone,
+                        email: customerEmail,
+                        wilaya,
+                        address
+                    });
+                } else {
+                    // Update customer info if provided
+                    customer = dbUtils.updateCustomer(customer.id, {
+                        name: customerName,
+                        email: customerEmail || customer.email,
+                        wilaya: wilaya || customer.wilaya,
+                        address: address || customer.address
+                    });
+                }
+
+                // Create order
+                const orderData = {
+                    productId,
+                    productName: product.name,
+                    quantity: parseInt(quantity),
+                    unitPrice,
+                    totalAmount,
+                    customerId: customer.id,
+                    customerName,
+                    customerPhone,
+                    customerEmail,
+                    wilaya,
+                    address,
+                    notes,
+                    status: 'pending'
+                };
+
+                const order = dbUtils.createOrder(orderData);
+
+                // Update product stock
+                dbUtils.updateProductStock(productId, product.stock - quantity);
+
+                // Add to Google Sheets (if configured)
+                try {
+                    await googleSheetsService.addOrder(order);
+                } catch (sheetsError) {
+                    console.warn('Failed to add order to Google Sheets:', sheetsError.message);
+                }
+
+                res.status(201).json({
+                    success: true,
+                    data: order,
+                    message: 'Order created successfully (fallback)',
+                    source: 'fallback'
+                });
+            } else {
+                res.status(500).json({
+                    success: false,
+                    error: 'Failed to create order',
+                    message: error.message
+                });
+            }
+        } catch (fallbackError) {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to create order',
+                message: fallbackError.message
+            });
+        }
     }
 });
 
