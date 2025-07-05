@@ -1,47 +1,74 @@
 import express from 'express';
 import { dbUtils } from '../models/database.js';
+import { productService, categoryService } from '../services/supabase.js';
 
 const router = express.Router();
 
 // GET /api/products - Get all products
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
     try {
-        const { category, limit, offset } = req.query;
-        let products = dbUtils.getAllProducts();
+        const { category, limit, offset, featured, inStockOnly } = req.query;
         
-        // Filter by category if specified
-        if (category) {
-            products = dbUtils.getProductsByCategory(category);
-        }
+        const filters = {
+            category: category || null,
+            featured: featured === 'true' ? true : (featured === 'false' ? false : null),
+            inStockOnly: inStockOnly === 'true',
+            limit: parseInt(limit) || 50,
+            offset: parseInt(offset) || 0
+        };
         
-        // Apply pagination
-        const startIndex = parseInt(offset) || 0;
-        const limitNum = parseInt(limit) || products.length;
-        const paginatedProducts = products.slice(startIndex, startIndex + limitNum);
+        const products = await productService.getProducts(filters);
         
         res.json({
             success: true,
-            data: paginatedProducts,
+            data: products,
             pagination: {
-                total: products.length,
-                offset: startIndex,
-                limit: limitNum,
-                hasMore: startIndex + limitNum < products.length
+                offset: filters.offset,
+                limit: filters.limit,
+                hasMore: products.length === filters.limit
             }
         });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch products',
-            message: error.message
-        });
+        console.error('Error fetching products:', error);
+        
+        // Fallback to in-memory database if Supabase fails
+        try {
+            const { category, limit, offset } = req.query;
+            let products = dbUtils.getAllProducts();
+            
+            if (category) {
+                products = dbUtils.getProductsByCategory(category);
+            }
+            
+            const startIndex = parseInt(offset) || 0;
+            const limitNum = parseInt(limit) || products.length;
+            const paginatedProducts = products.slice(startIndex, startIndex + limitNum);
+            
+            res.json({
+                success: true,
+                data: paginatedProducts,
+                pagination: {
+                    total: products.length,
+                    offset: startIndex,
+                    limit: limitNum,
+                    hasMore: startIndex + limitNum < products.length
+                },
+                source: 'fallback'
+            });
+        } catch (fallbackError) {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to fetch products',
+                message: error.message
+            });
+        }
     }
 });
 
 // GET /api/products/search - Search products
-router.get('/search', (req, res) => {
+router.get('/search', async (req, res) => {
     try {
-        const { q, category, minPrice, maxPrice } = req.query;
+        const { q, category, language, limit } = req.query;
         
         if (!q) {
             return res.status(400).json({
@@ -51,70 +78,118 @@ router.get('/search', (req, res) => {
             });
         }
         
-        let products = dbUtils.searchProducts(q);
+        const filters = {
+            category: category || null,
+            language: language || 'fr',
+            limit: parseInt(limit) || 10
+        };
         
-        // Additional filters
-        if (category) {
-            products = products.filter(product => 
-                product.category.toLowerCase() === category.toLowerCase()
-            );
-        }
-        
-        if (minPrice) {
-            products = products.filter(product => product.price >= parseFloat(minPrice));
-        }
-        
-        if (maxPrice) {
-            products = products.filter(product => product.price <= parseFloat(maxPrice));
-        }
+        const products = await productService.searchProducts(q, filters);
         
         res.json({
             success: true,
             data: products,
             searchQuery: q,
-            resultsCount: products.length
+            resultsCount: products.length,
+            filters: filters
         });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Search failed',
-            message: error.message
-        });
+        console.error('Error searching products:', error);
+        
+        // Fallback to in-memory database search
+        try {
+            const { q, category, minPrice, maxPrice } = req.query;
+            let products = dbUtils.searchProducts(q);
+            
+            // Additional filters
+            if (category) {
+                products = products.filter(product => 
+                    product.category.toLowerCase() === category.toLowerCase()
+                );
+            }
+            
+            if (minPrice) {
+                products = products.filter(product => product.price >= parseFloat(minPrice));
+            }
+            
+            if (maxPrice) {
+                products = products.filter(product => product.price <= parseFloat(maxPrice));
+            }
+            
+            res.json({
+                success: true,
+                data: products,
+                searchQuery: q,
+                resultsCount: products.length,
+                source: 'fallback'
+            });
+        } catch (fallbackError) {
+            res.status(500).json({
+                success: false,
+                error: 'Search failed',
+                message: error.message
+            });
+        }
     }
 });
 
 // GET /api/products/categories - Get all product categories
-router.get('/categories', (req, res) => {
+router.get('/categories', async (req, res) => {
     try {
-        const categories = dbUtils.getCategories();
-        const categoriesWithCounts = categories.map(category => {
-            const products = dbUtils.getProductsByCategory(category);
-            return {
-                name: category,
-                nameAr: products[0]?.categoryAr || category,
-                count: products.length,
-                products: products.map(p => ({ id: p.id, name: p.name, nameAr: p.nameAr }))
-            };
-        });
+        const categories = await categoryService.getCategoriesWithCounts();
+        
+        const categoriesWithCounts = categories.map(category => ({
+            id: category.id,
+            name: category.name,
+            nameAr: category.name_ar,
+            slug: category.slug,
+            description: category.description,
+            descriptionAr: category.description_ar,
+            count: category.products?.[0]?.count || 0,
+            imageUrl: category.image_url,
+            sortOrder: category.sort_order
+        }));
         
         res.json({
             success: true,
             data: categoriesWithCounts
         });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch categories',
-            message: error.message
-        });
+        console.error('Error fetching categories:', error);
+        
+        // Fallback to in-memory database
+        try {
+            const categories = dbUtils.getCategories();
+            const categoriesWithCounts = categories.map(category => {
+                const products = dbUtils.getProductsByCategory(category);
+                return {
+                    name: category,
+                    nameAr: products[0]?.categoryAr || category,
+                    count: products.length,
+                    products: products.map(p => ({ id: p.id, name: p.name, nameAr: p.nameAr }))
+                };
+            });
+            
+            res.json({
+                success: true,
+                data: categoriesWithCounts,
+                source: 'fallback'
+            });
+        } catch (fallbackError) {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to fetch categories',
+                message: error.message
+            });
+        }
     }
 });
 
 // GET /api/products/:id - Get product by ID
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const product = dbUtils.getProductById(id);
+        const product = await productService.getProductById(id);
         
         if (!product) {
             return res.status(404).json({
@@ -124,19 +199,46 @@ router.get('/:id', (req, res) => {
             });
         }
         
-        // Increment product view count
-        dbUtils.incrementProductView(id);
+        // Increment product view count (async, don't wait for result)
+        productService.incrementProductViews(id).catch(error => {
+            console.warn('Failed to increment product views:', error.message);
+        });
         
         res.json({
             success: true,
             data: product
         });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to fetch product',
-            message: error.message
-        });
+        console.error('Error fetching product:', error);
+        
+        // Fallback to in-memory database
+        try {
+            const { id } = req.params;
+            const product = dbUtils.getProductById(id);
+            
+            if (!product) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Product not found',
+                    message: `Product with ID "${id}" does not exist`
+                });
+            }
+            
+            // Increment product view count
+            dbUtils.incrementProductView(id);
+            
+            res.json({
+                success: true,
+                data: product,
+                source: 'fallback'
+            });
+        } catch (fallbackError) {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to fetch product',
+                message: error.message
+            });
+        }
     }
 });
 
@@ -195,41 +297,65 @@ router.get('/:id/related', (req, res) => {
 });
 
 // GET /api/products/:id/availability - Check product availability
-router.get('/:id/availability', (req, res) => {
+router.get('/:id/availability', async (req, res) => {
     try {
         const { id } = req.params;
-        const { quantity = 1 } = req.query;
-        const product = dbUtils.getProductById(id);
         
-        if (!product) {
+        // Get product availability from Supabase
+        const availability = await productService.getProductAvailability(id);
+        
+        if (!availability) {
             return res.status(404).json({
                 success: false,
-                error: 'Product not found'
+                error: 'Product not found',
+                message: `Product with ID "${id}" does not exist`
             });
         }
         
-        const requestedQuantity = parseInt(quantity);
-        const isAvailable = product.stock >= requestedQuantity;
-        
         res.json({
             success: true,
-            data: {
-                productId: id,
-                productName: product.name,
-                requestedQuantity,
-                currentStock: product.stock,
-                isAvailable,
-                maxAvailable: product.stock,
-                status: product.stock === 0 ? 'out_of_stock' : 
-                       product.stock < 5 ? 'low_stock' : 'in_stock'
-            }
+            data: availability
         });
     } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to check availability',
-            message: error.message
-        });
+        console.error('Error checking product availability:', error);
+        
+        // Fallback to in-memory database
+        try {
+            const { id } = req.params;
+            const { quantity = 1 } = req.query;
+            const product = dbUtils.getProductById(id);
+            
+            if (!product) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Product not found'
+                });
+            }
+            
+            const requestedQuantity = parseInt(quantity);
+            const isAvailable = product.stock >= requestedQuantity;
+            
+            res.json({
+                success: true,
+                data: {
+                    productId: id,
+                    productName: product.name,
+                    requestedQuantity,
+                    currentStock: product.stock,
+                    isAvailable,
+                    maxAvailable: product.stock,
+                    status: product.stock === 0 ? 'out_of_stock' : 
+                           product.stock < 5 ? 'low_stock' : 'in_stock'
+                },
+                source: 'fallback'
+            });
+        } catch (fallbackError) {
+            res.status(500).json({
+                success: false,
+                error: 'Failed to check availability',
+                message: error.message
+            });
+        }
     }
 });
 

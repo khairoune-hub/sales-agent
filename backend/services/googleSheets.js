@@ -10,6 +10,49 @@ const __dirname = dirname(__filename);
 let sheets = null;
 let auth = null;
 
+// Enhanced Google Sheets structure for the sales agent
+const SHEET_STRUCTURE = {
+    orders: {
+        name: 'Orders',
+        headers: [
+            'Order ID', 'Order Number', 'Date & Time', 'Customer Name', 'Customer Phone',
+            'Customer Email', 'Platform', 'Platform ID', 'Wilaya', 'Address',
+            'Products', 'Quantities', 'Unit Prices', 'Total Amount', 'Status',
+            'Payment Status', 'Notes', 'Sales Agent', 'Confirmed Date', 'Confirmed By'
+        ]
+    },
+    customers: {
+        name: 'Customers',
+        headers: [
+            'Customer ID', 'Name', 'Phone', 'Email', 'Platform', 'Platform ID',
+            'Wilaya', 'Address', 'Language', 'Total Orders', 'Total Spent',
+            'Is VIP', 'First Contact', 'Last Contact', 'Last Order Date'
+        ]
+    },
+    inventory_updates: {
+        name: 'Inventory_Updates',
+        headers: [
+            'Date & Time', 'Product ID', 'Product Name', 'SKU', 'Transaction Type',
+            'Quantity Change', 'Old Quantity', 'New Quantity', 'Reference Type',
+            'Reference ID', 'Notes', 'Created By'
+        ]
+    },
+    daily_summary: {
+        name: 'Daily_Summary',
+        headers: [
+            'Date', 'Platform', 'Total Orders', 'Pending Orders', 'Confirmed Orders',
+            'Cancelled Orders', 'Total Revenue', 'New Customers', 'Returning Customers',
+            'Top Product', 'Top Category'
+        ]
+    },
+    analytics: {
+        name: 'Analytics',
+        headers: [
+            'Date', 'Platform', 'Metric Type', 'Metric Value', 'Additional Data'
+        ]
+    }
+};
+
 // Initialize Google Sheets authentication
 const initializeGoogleSheets = async () => {
     try {
@@ -74,7 +117,7 @@ export const googleSheetsService = {
     // Initialize the service
     initialize: initializeGoogleSheets,
 
-    // Add a new order to Google Sheets
+    // Add a new order to Google Sheets (enhanced version)
     addOrder: async (order) => {
         // Ensure service is initialized
         if (!sheets) {
@@ -88,26 +131,37 @@ export const googleSheetsService = {
 
         try {
             const spreadsheetId = getSpreadsheetId();
-            const range = 'Orders!A:M'; // Adjust range as needed
+            const range = `${SHEET_STRUCTURE.orders.name}!A:T`;
 
-            // Prepare order data for sheets
+            // Prepare enhanced order data for sheets
+            const products = order.order_items?.map(item => item.products?.name || item.product_name).join(', ') || '';
+            const quantities = order.order_items?.map(item => item.quantity).join(', ') || '';
+            const unitPrices = order.order_items?.map(item => item.unit_price).join(', ') || '';
+
             const orderRow = [
                 order.id,
-                new Date(order.createdAt).toLocaleString('fr-FR'),
-                order.customerName,
-                order.customerPhone,
-                order.customerEmail || '',
+                order.order_number,
+                new Date(order.created_at).toLocaleString('fr-FR'),
+                order.customers?.name || order.customer_name || '',
+                order.customers?.phone || order.phone || '',
+                order.customers?.email || order.email || '',
+                order.platform_type || '',
+                order.customers?.platform_id || '',
                 order.wilaya || '',
-                order.address || '',
-                order.productName,
-                order.quantity,
-                order.unitPrice,
-                order.totalAmount,
+                order.shipping_address || '',
+                products,
+                quantities,
+                unitPrices,
+                order.total_amount,
                 order.status,
-                order.notes || ''
+                order.payment_status || '',
+                order.notes || '',
+                order.sales_agent || '',
+                order.confirmed_at ? new Date(order.confirmed_at).toLocaleString('fr-FR') : '',
+                order.confirmed_by || ''
             ];
 
-            // Check if headers exist, if not create them
+            // Ensure headers exist
             await googleSheetsService.ensureHeaders(spreadsheetId);
 
             // Append the order
@@ -120,7 +174,7 @@ export const googleSheetsService = {
                 }
             });
 
-            console.log(`✅ Order ${order.id} added to Google Sheets`);
+            console.log(`✅ Order ${order.order_number} added to Google Sheets`);
             return response.data;
         } catch (error) {
             console.error('❌ Failed to add order to Google Sheets:', error.message);
@@ -175,7 +229,7 @@ export const googleSheetsService = {
         }
     },
 
-    // Add customer to Google Sheets
+    // Add customer to Google Sheets (enhanced version)
     addCustomer: async (customer) => {
         // Ensure service is initialized
         if (!sheets) {
@@ -189,17 +243,25 @@ export const googleSheetsService = {
 
         try {
             const spreadsheetId = getSpreadsheetId();
-            const range = 'Customers!A:H';
+            const range = `${SHEET_STRUCTURE.customers.name}!A:O`;
 
-            // Prepare customer data
+            // Prepare enhanced customer data
             const customerRow = [
                 customer.id,
-                new Date(customer.createdAt).toLocaleString('fr-FR'),
-                customer.name,
-                customer.phone,
+                customer.name || '',
+                customer.phone || '',
                 customer.email || '',
+                customer.platform_type || '',
+                customer.platform_id || '',
                 customer.wilaya || '',
                 customer.address || '',
+                customer.preferred_language || 'fr',
+                customer.total_orders || 0,
+                customer.total_spent || 0,
+                customer.is_vip ? 'Yes' : 'No',
+                customer.first_contact_date ? new Date(customer.first_contact_date).toLocaleString('fr-FR') : '',
+                customer.last_contact_date ? new Date(customer.last_contact_date).toLocaleString('fr-FR') : '',
+                customer.last_order_date ? new Date(customer.last_order_date).toLocaleString('fr-FR') : '',
                 customer.notes || ''
             ];
 
@@ -501,6 +563,148 @@ export const googleSheetsService = {
         } catch (error) {
             console.error('❌ Bulk sync failed:', error.message);
             return false;
+        }
+    },
+
+    // Add inventory update to Google Sheets
+    addInventoryUpdate: async (inventoryUpdate) => {
+        if (!sheets) {
+            const initialized = await initializeGoogleSheets();
+            if (!initialized || !sheets) {
+                console.warn('Google Sheets not configured, skipping inventory update sync');
+                return false;
+            }
+        }
+
+        try {
+            const spreadsheetId = getSpreadsheetId();
+            const range = `${SHEET_STRUCTURE.inventory_updates.name}!A:L`;
+
+            const updateRow = [
+                new Date(inventoryUpdate.created_at).toLocaleString('fr-FR'),
+                inventoryUpdate.product_id,
+                inventoryUpdate.product_name || '',
+                inventoryUpdate.product_sku || '',
+                inventoryUpdate.transaction_type,
+                inventoryUpdate.quantity_change,
+                inventoryUpdate.old_quantity,
+                inventoryUpdate.new_quantity,
+                inventoryUpdate.reference_type || '',
+                inventoryUpdate.reference_id || '',
+                inventoryUpdate.notes || '',
+                inventoryUpdate.created_by || ''
+            ];
+
+            await googleSheetsService.ensureHeaders(spreadsheetId);
+
+            const response = await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range,
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [updateRow]
+                }
+            });
+
+            console.log(`✅ Inventory update added to Google Sheets`);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Failed to add inventory update to Google Sheets:', error.message);
+            return false;
+        }
+    },
+
+    // Add daily summary to Google Sheets
+    addDailySummary: async (summaryData) => {
+        if (!sheets) {
+            const initialized = await initializeGoogleSheets();
+            if (!initialized || !sheets) {
+                console.warn('Google Sheets not configured, skipping daily summary sync');
+                return false;
+            }
+        }
+
+        try {
+            const spreadsheetId = getSpreadsheetId();
+            const range = `${SHEET_STRUCTURE.daily_summary.name}!A:J`;
+
+            const summaryRow = [
+                summaryData.date,
+                summaryData.platform,
+                summaryData.total_orders,
+                summaryData.pending_orders,
+                summaryData.confirmed_orders,
+                summaryData.cancelled_orders,
+                summaryData.total_revenue,
+                summaryData.new_customers,
+                summaryData.returning_customers,
+                summaryData.top_product || '',
+                summaryData.top_category || ''
+            ];
+
+            await googleSheetsService.ensureHeaders(spreadsheetId);
+
+            const response = await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range,
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [summaryRow]
+                }
+            });
+
+            console.log(`✅ Daily summary added to Google Sheets`);
+            return response.data;
+        } catch (error) {
+            console.error('❌ Failed to add daily summary to Google Sheets:', error.message);
+            return false;
+        }
+    },
+
+    // Enhanced method to ensure all sheet headers exist
+    ensureAllSheetHeaders: async (spreadsheetId) => {
+        try {
+            // Get current sheets
+            const response = await sheets.spreadsheets.get({
+                spreadsheetId
+            });
+
+            const existingSheets = response.data.sheets.map(sheet => sheet.properties.title);
+            console.log(`📋 Existing sheets: ${existingSheets.join(', ')}`);
+
+            // Create all required sheets and headers
+            for (const [key, sheetConfig] of Object.entries(SHEET_STRUCTURE)) {
+                if (!existingSheets.includes(sheetConfig.name)) {
+                    console.log(`📝 Creating ${sheetConfig.name} sheet...`);
+                    await sheets.spreadsheets.batchUpdate({
+                        spreadsheetId,
+                        resource: {
+                            requests: [{
+                                addSheet: {
+                                    properties: {
+                                        title: sheetConfig.name
+                                    }
+                                }
+                            }]
+                        }
+                    });
+                }
+
+                // Add headers
+                const headerRange = `${sheetConfig.name}!A1:${String.fromCharCode(65 + sheetConfig.headers.length - 1)}1`;
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId,
+                    range: headerRange,
+                    valueInputOption: 'USER_ENTERED',
+                    resource: {
+                        values: [sheetConfig.headers]
+                    }
+                });
+            }
+
+            console.log('✅ All sheet headers ensured');
+        } catch (error) {
+            console.error('❌ Error ensuring all sheet headers:', error.message);
         }
     }
 };

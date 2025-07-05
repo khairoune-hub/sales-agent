@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PORT = process.env.PORT || 3000;
-const PUBLIC_DIR = join(__dirname, 'public');
+const PUBLIC_DIR = __dirname;
 
 // MIME types
 const mimeTypes = {
@@ -122,7 +122,7 @@ server.listen(PORT, () => {
    • http://localhost:${PORT}/admin.html (Admin interface)
    • http://localhost:${PORT}/chat.html  (Customer chat)
 
-🔧 Backend API should be running on: http://localhost:8787
+🔧 Backend API running on: http://localhost:8787
 
 Press Ctrl+C to stop the server
 `);

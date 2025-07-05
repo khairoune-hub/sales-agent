@@ -1,22 +1,7 @@
-// X Company Bio Products Sales Agent - Cloudflare Worker Backend
+// Lingerie Store Products Sales Agent - Cloudflare Worker Backend
 // Pure API backend for bio products sales
 
 import { OpenAI } from 'openai';
-
-// Fixed Assistant ID
-const ASSISTANT_ID = 'asst_6L1tElqeiaK2fNBoLNuy7tgp';
-
-// Mock Database for X Company Bio Products
-const bioProductsData = {
-    'poudre-proteinee-bio': { id: 'poudre-proteinee-bio', name: 'X Poudre de Protéines Bio (Vanille)', price: 45.99, stock: 25, category: 'Compléments' },
-    'the-vert-biologique': { id: 'the-vert-biologique', name: 'X Thé Vert Biologique (50 sachets)', price: 18.99, stock: 40, category: 'Boissons' },
-    'multivitamines-bio': { id: 'multivitamines-bio', name: 'X Complexe Multivitamines Bio', price: 32.99, stock: 15, category: 'Compléments' },
-    'miel-biologique': { id: 'miel-biologique', name: 'X Miel Pur Biologique (500g)', price: 24.99, stock: 30, category: 'Alimentation' },
-    'omega3-bio': { id: 'omega3-bio', name: 'X Huile de Poisson Oméga-3 Bio', price: 28.99, stock: 24, category: 'Compléments' },
-    'huile-noix-coco-biologique': { id: 'huile-noix-coco-biologique', name: 'X Huile de Noix de Coco Biologique (500ml)', price: 22.99, stock: 35, category: 'Alimentation' },
-    'spiruline-bio': { id: 'spiruline-bio', name: 'X Comprimés de Spiruline Bio', price: 35.99, stock: 18, category: 'Compléments' },
-    'graines-chia-biologiques': { id: 'graines-chia-biologiques', name: 'X Graines de Chia Biologiques (250g)', price: 16.99, stock: 45, category: 'Alimentation' }
-};
 
 // JWT utility functions for Google Sheets authentication
 function base64UrlEncode(str) {
@@ -208,60 +193,6 @@ async function addOrderToSheet(order, env) {
 // Function implementations
 const functions = {
     check_product_availability: async ({ product_name }, env) => {
-        const products = bioProductsData;
-        
-        // Auto-detect category
-        let category = null;
-        if (product_name) {
-            const query = product_name.toLowerCase();
-            if (query.includes('complément') || query.includes('supplement') || query.includes('protéine') || query.includes('protein') || 
-                query.includes('vitamine') || query.includes('vitamin') || query.includes('omega') || query.includes('oméga') || 
-                query.includes('spiruline') || query.includes('spirulina')) {
-                category = 'Compléments';
-            } else if (query.includes('alimentation') || query.includes('food') || query.includes('miel') || query.includes('honey') || 
-                      query.includes('huile') || query.includes('oil') || query.includes('graines') || query.includes('seeds')) {
-                category = 'Alimentation';
-            } else if (query.includes('thé') || query.includes('tea') || query.includes('boisson') || query.includes('beverage')) {
-                category = 'Boissons';
-            }
-        }
-
-        let filteredProducts = products;
-        if (category) {
-            filteredProducts = Object.fromEntries(
-                Object.entries(products).filter(([key, product]) => product.category === category)
-            );
-        }
-
-        const formatAvailableProducts = (prods) => {
-            const productsByCategory = {};
-            Object.values(prods).filter(p => p.stock > 0).forEach(p => {
-                if (!productsByCategory[p.category]) {
-                    productsByCategory[p.category] = [];
-                }
-                productsByCategory[p.category].push(p);
-            });
-
-            let result = `🌿 X Company Bio Products Available:\n\n`;
-            
-            Object.entries(productsByCategory).forEach(([cat, products]) => {
-                const categoryEmoji = cat === 'Compléments' ? '💊' : cat === 'Alimentation' ? '🍯' : '🍃';
-                result += `${categoryEmoji} ${cat}:\n`;
-                products.forEach(p => {
-                    result += `• ${p.name}: ${p.price.toFixed(2)} DA (Stock: ${p.stock})\n`;
-                });
-                result += '\n';
-            });
-            
-            return result;
-        };
-
-        if (!product_name || product_name.toLowerCase().includes('all') || 
-            product_name.toLowerCase().includes('available') || 
-            product_name.includes('products')) {
-            return formatAvailableProducts(filteredProducts);
-        }
-
         // Product search logic
         let product = null;
         const searchTerm = product_name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -269,8 +200,8 @@ const functions = {
         
         // Try exact match first
         const exactKey = searchTerm.replace(/\s+/g, '-');
-        if (filteredProducts[exactKey]) {
-            product = filteredProducts[exactKey];
+        if (product) {
+            product = product;
         }
         
         // Fuzzy matching if no exact match
@@ -278,7 +209,7 @@ const functions = {
             let bestMatch = null;
             let bestScore = 0;
             
-            Object.entries(filteredProducts).forEach(([key, prod]) => {
+            Object.entries(bioProductsData).forEach(([key, prod]) => {
                 const productName = prod.name.toLowerCase();
                 const productKeywords = productName.split(/[\s-]+/);
                 
@@ -316,13 +247,13 @@ const functions = {
         }
         
         if (!product) {
-            return `❌ Product "${product_name}" not found.\n\n${formatAvailableProducts(filteredProducts)}`;
+            return `❌ Product "${product_name}" not found.`;
         }
         
         if (product.stock > 0) {
             return `✅ ${product.name} is in stock!\n💰 Price: ${product.price.toFixed(2)} DA\n📦 Stock: ${product.stock} units\n🌿 Category: ${product.category}`;
         } else {
-            return `❌ ${product.name} is currently out of stock.\n\n${formatAvailableProducts(filteredProducts)}`;
+            return `❌ ${product.name} is currently out of stock.`;
         }
     },
 
@@ -350,7 +281,7 @@ const functions = {
             await env.CACHE.put(`customer_phone_${phone}`, JSON.stringify(customer), { expirationTtl: 86400 * 30 });
             await addCustomerToSheet(customer, env);
             
-            return `✅ Welcome to X Company Bio Products!\n- Customer ID: ${customerId}\n- Name: ${name}\n- Phone: ${phone}\n- Wilaya: ${wilaya}`;
+            return `✅ Welcome to Lingerie Store Products!\n- Customer ID: ${customerId}\n- Name: ${name}\n- Phone: ${phone}\n- Wilaya: ${wilaya}`;
         } catch (error) {
             return `❌ Error saving customer data`;
         }
@@ -458,7 +389,7 @@ const functions = {
 ✅ Votre commande a été enregistrée avec succès !
 📞 Nous vous contacterons bientôt pour confirmer la livraison.
 
-Merci de votre confiance en X Company Produits Bio ! 🌿`;
+Merci de votre confiance en Lingerie Store Products ! 🌿`;
             
         } catch (error) {
             console.error('❌ Order processing error:', error);
@@ -471,7 +402,7 @@ Merci de votre confiance en X Company Produits Bio ! 🌿`;
             timeZone: 'Africa/Algiers'
         });
         
-        let report = `📊 X Company Bio Products Sales Report - ${reportTime}\n\n`;
+        let report = `📊 Lingerie Store Products Sales Report - ${reportTime}\n\n`;
         report += `🌿 PRODUCTS AVAILABLE:\n`;
         Object.values(bioProductsData).forEach(product => {
             const emoji = product.category === 'Compléments' ? '💊' : product.category === 'Alimentation' ? '🍯' : '🍃';
@@ -516,34 +447,70 @@ class CloudflareSalesAssistant {
             // Step 3: Create run with optimized instructions
             const run = await this.openai.beta.threads.runs.create(threadId, {
                 assistant_id: this.assistantId,
-                instructions: `You are a sales assistant for X Company Bio Products in Algeria. 
+                instructions: `Tu es un assistant commercial expert pour une boutique de lingerie féminine, spécialisé dans les soutiens-gorge, culottes, ensembles et vêtements de nuit.
 
-IMPORTANT ORDER PROCESSING RULES:
-1. When a customer mentions wanting to order a product, immediately collect ALL required info in ONE message:
-   - Customer name
-   - Phone number  
-   - Wilaya (province)
-   - Product name
-   - Quantity (default to 1 if not specified)
+PRODUITS DISPONIBLES:
+CATÉGORIES:
+1. SOUTIENS-GORGE:
+   - Soutien-gorge Push-up Dentelle Rose - 39.99€ - Effet push-up naturel, armatures confortables
+   - Soutien-gorge Sans Armatures Coton Bio - 29.99€ - Confort absolu, coton biologique
+   - Soutien-gorge Sport Performance - 34.99€ - Support optimal, évacuation humidité
 
-2. DO NOT ask for confirmation multiple times. Once you have the required info, IMMEDIATELY call place_order function.
+2. CULOTTES & SLIPS:
+   - Culotte Taille Haute Dentelle Noire - 24.99€ - Coupe flatteuse, finitions invisibles
+   - String Microfibre Nude - 16.99€ - Invisible sous les vêtements, confort discret
 
-3. For honey orders: if customer says "miel" or "honey", use "miel" as the product_name.
+3. ENSEMBLES:
+   - Ensemble Push-up Dentelle Rouge Passion - 59.99€ - Parfait pour occasions spéciales
+   - Ensemble Coton Bio Blanc Naturel - 49.99€ - Confort naturel au quotidien
 
-4. NEVER ask "are you sure" or "confirm" - just process the order directly.
+4. NUISETTES:
+   - Nuisette Satin Noir Élégante - 69.99€ - Nuits glamour, broderies délicates
 
-5. Keep responses concise and in French.
+5. BODIES:
+   - Body Dentelle Transparent Blanc - 47.99€ - Design sensuel, fermeture pression
 
-6. Available functions:
-   - check_product_availability: Check products and prices
-   - place_order: Process orders (requires: product_name, quantity, customer_phone, customer_name, wilaya)
-   - save_client_data: Save customer info
+6. LINGERIE SEXY:
+   - Porte-jarretelles Satin Rouge - 34.99€ - Accessoire indispensable pour tenues sexy
 
-Example flow:
-Customer: "je veux commander du miel, moussa khairoune 0778053400 alger"
-You: Call place_order immediately with: {product_name: "miel", quantity: 1, customer_name: "moussa khairoune", customer_phone: "0778053400", wilaya: "alger"}
+7. GRANDES TAILLES:
+   - Soutien-gorge Grande Taille Dentelle Beige - 52.99€ - Support optimal pour grandes tailles
+   - Culotte Grande Taille Coton Doux - 29.99€ - Confort sans compromis
 
-Be efficient and direct. Process orders immediately when you have the required information.`
+TAILLES DISPONIBLES:
+- Soutiens-gorge: 85A, 85B, 90B, 90C, 95C, 100D
+- Culottes: S, M, L, XL
+- Ensembles: Toutes tailles assorties
+
+COULEURS DISPONIBLES:
+- Rose, Noir, Rouge, Blanc, Nude, Beige
+
+PROCESSUS DE COMMANDE:
+1. Présenter le produit et son prix
+2. Demander: NOM COMPLET du client
+3. Demander: NUMÉRO DE TÉLÉPHONE
+4. Demander: ADRESSE DE LIVRAISON
+5. Demander: TAILLE souhaitée (si applicable)
+6. Confirmer la commande avec tous les détails
+
+INSTRUCTIONS:
+- Sois chaleureux, professionnel et discret
+- Recommande des produits adaptés aux besoins et occasions
+- Explique les avantages (confort, qualité, style)
+- Pour les commandes, collecte OBLIGATOIREMENT: nom, téléphone, adresse, taille
+- Utilise la fonction save_order_data pour enregistrer les commandes
+- Réponds en français sauf si le client préfère l'arabe
+- Pose des questions pour mieux comprendre les besoins et occasions
+- Sois respectueux et professionnel dans tes réponses
+- Propose des ensembles assortis quand c'est approprié
+- Mentionne les promotions et prix réduits quand disponibles
+
+CONSEILS DE VENTE:
+- Demande l'occasion (quotidien, sport, occasion spéciale, soirée)
+- Suggère des ensembles assortis
+- Explique les matériaux et leurs avantages
+- Propose des tailles appropriées
+- Mentionne la disponibilité des couleurs`
             });
 
             // Step 4: Wait for completion with optimized timing
@@ -735,71 +702,23 @@ Be efficient and direct. Process orders immediately when you have the required i
         
         // Intelligent fallback responses based on message content
         if (lowerMessage.includes('produits') || lowerMessage.includes('products')) {
-            return `🌿 **X Company Produits Bio - Catalogue Rapide**
-
-Nos produits biologiques disponibles :
-
-💊 **Compléments Alimentaires:**
-• Poudre de Protéines Bio (Vanille) - 45.99 DA
-• Complexe Multivitamines Bio - 32.99 DA  
-• Huile de Poisson Oméga-3 Bio - 28.99 DA
-• Comprimés de Spiruline Bio - 35.99 DA
-
-🍯 **Alimentation Bio:**
-• Miel Pur Biologique (500g) - 24.99 DA
-• Huile de Noix de Coco Bio (500ml) - 22.99 DA
-• Graines de Chia Bio (250g) - 16.99 DA
-
-🍃 **Boissons:**
-• Thé Vert Biologique (50 sachets) - 18.99 DA
-
-Pour commander ou plus d'infos, contactez-nous !`;
+            return `🌿 ** Lingerie Store Products - Catalogue Rapide **`;
         }
         
         if (lowerMessage.includes('prix') || lowerMessage.includes('price')) {
-            return `💰 **Nos Prix Compétitifs:**
-
-Les prix varient de 16.99 DA à 45.99 DA selon le produit.
-Tous nos produits sont certifiés biologiques et de haute qualité.
-
-Pour un devis personnalisé ou des promotions en cours, n'hésitez pas à nous contacter !`;
+            return `💰 **Nos Prix Compétitifs:**`;
         }
         
         if (lowerMessage.includes('commander') || lowerMessage.includes('order')) {
-            return `🛒 **Comment Commander:**
-
-1. Choisissez vos produits dans notre catalogue
-2. Contactez-nous avec le nom du produit et la quantité
-3. Nous confirmons votre commande et les détails de livraison
-4. Paiement à la livraison disponible
-
-📞 Contactez-nous pour passer votre commande !`;
+            return `🛒 **Comment Commander:**`;
         }
         
         if (lowerMessage.includes('bonjour') || lowerMessage.includes('salut') || lowerMessage.includes('hello')) {
-            return `🌿 Bonjour et bienvenue chez X Company Produits Bio !
-
-Je suis votre assistant virtuel. Je peux vous aider avec :
-• Découvrir nos produits biologiques
-• Obtenir des informations sur les prix
-• Vous guider pour passer commande
-• Répondre à vos questions
-
-Que puis-je faire pour vous aujourd'hui ?`;
+            return `🌿 Bonjour et bienvenue chez Lingerie Store Products !`;
         }
         
         // Default fallback
-        return `🌿 Merci pour votre message ! 
-
-Je rencontre actuellement des difficultés techniques, mais je reste à votre service.
-
-**Nos services :**
-• Produits biologiques certifiés
-• Compléments alimentaires naturels  
-• Livraison rapide
-• Support client dédié
-
-Pour une assistance immédiate, n'hésitez pas à nous recontacter ou à reformuler votre question.`;
+        return `🌿 Merci pour votre message !`;
     }
 }
 
@@ -920,7 +839,7 @@ export default {
 
             // Default API info
             return new Response(JSON.stringify({
-                message: 'X Company Bio Products API Backend',
+                message: 'Lingerie Store Products API Backend',
                 platform: 'Cloudflare Workers',
                 endpoints: [
                     '/api/initialize',
