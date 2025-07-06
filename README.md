@@ -1,6 +1,6 @@
 # X Company Bio Products - Express.js Backend
 
-A comprehensive Express.js backend for managing bio products sales, customer relationships, and AI-powered chat support.
+A comprehensive Express.js backend for managing lingerie products sales, customer relationships, and AI-powered chat support.
 
 ## 🚀 Features
 
@@ -297,6 +297,14 @@ curl -X POST http://localhost:3000/api/chat/start \
 curl http://localhost:3000/api/analytics/dashboard
 ```
 
+## 📖 Documentation
+
+For detailed guides and setup instructions, visit the [Documentation Directory](./docs/):
+
+- **[Deployment Guides](./docs/deployment/)** - Cloudflare Workers, Vercel, and general deployment
+- **[Integration Guides](./docs/integrations/)** - Messenger, WhatsApp, Supabase, and other integrations  
+- **[Technical Guides](./docs/guides/)** - Implementation details and quick start guides
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -312,6 +320,7 @@ MIT License - see LICENSE file for details
 ## 🆘 Support
 
 For support and questions:
+
 - Check the API documentation at `/api`
 - Review the health check at `/health`
 - Monitor system status at `/api/admin/health`
@@ -319,4 +328,4 @@ For support and questions:
 ---
 
 **X Company Bio Products Backend v2.0.0**  
-Built with Express.js, OpenAI, and Google Sheets integration 
+Built with Express.js, OpenAI, and Google Sheets integration

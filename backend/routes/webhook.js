@@ -8,7 +8,7 @@ const router = express.Router();
 
 // Messenger configuration - Using hardcoded fallback for testing
 const getMessengerConfig = () => ({
-    MESSENGER_VERIFY_TOKEN: 'salesagent', // Hardcoded for testing
+    MESSENGER_VERIFY_TOKEN: process.env.MESSENGER_VERIFY_TOKEN || 'salesagent',
     MESSENGER_ACCESS_TOKEN: process.env.MESSENGER_ACCESS_TOKEN,
     MESSENGER_APP_SECRET: process.env.MESSENGER_APP_SECRET
 });
@@ -102,10 +102,17 @@ function verifyWebhookSignature(req) {
     // Temporarily disable signature verification for testing
     console.log('⚠️ Signature verification disabled for testing');
     return true;
+
+    // Check if in production mode
+    const isProduction = process.env.NODE_ENV === 'production';
     
     if (!config.MESSENGER_APP_SECRET) {
-        console.log('⚠️ No app secret configured - skipping signature verification');
-        return true; // Allow in development
+        if (isProduction) {
+            console.error('❌ No app secret configured in production!');
+            return false;
+        }
+        console.log('⚠️ No app secret configured - skipping signature verification (development mode)');
+        return true;
     }
     
     const signature = req.headers['x-hub-signature-256'];
@@ -225,14 +232,16 @@ async function createMessengerSession(senderId) {
         // Create or get customer in Supabase
         let customer = null;
         try {
-            customer = await customerService.getOrCreateCustomer({
-                platform_id: senderId,
-                platform: 'messenger',
-                name: `${userProfile.first_name} ${userProfile.last_name}`.trim() || 'Utilisateur Messenger',
-                email: userProfile.email || null,
-                phone: userProfile.phone || null,
-                profile_data: userProfile
-            });
+            customer = await customerService.getOrCreateCustomer(
+                senderId,
+                'messenger',
+                {
+                    name: `${userProfile.first_name} ${userProfile.last_name}`.trim() || 'Utilisateur Messenger',
+                    email: userProfile.email || null,
+                    phone: userProfile.phone || null,
+                    language: 'fr'
+                }
+            );
             console.log(`✅ Customer created/retrieved: ${customer.name}`);
         } catch (supabaseError) {
             console.warn('⚠️ Supabase customer creation failed, using session-only data:', supabaseError.message);
@@ -248,7 +257,7 @@ async function createMessengerSession(senderId) {
             customer,
             createdAt: new Date().toISOString(),
             lastActivityAt: new Date().toISOString(),
-            language: 'fr', // Default to French
+            language: 'ar', // Default to French
             messageCount: 0
         };
         
@@ -323,18 +332,17 @@ async function processTextMessage(senderId, text, session) {
         try {
             // Log to Supabase interaction service
             if (session.customer) {
-                await interactionService.logInteraction({
-                    customer_id: session.customer.id,
-                    platform: 'messenger',
-                    interaction_type: 'message',
-                    message: text,
-                    ai_response: response,
-                    metadata: {
+                await interactionService.logInteraction(
+                    session.customer.id,
+                    {
+                        platformType: 'messenger',
+                        type: 'message',
+                        message: text,
+                        aiResponse: response,
                         threadId: session.threadId,
-                        messageCount: session.messageCount,
                         language: session.language
                     }
-                });
+                );
             }
         } catch (interactionError) {
             console.warn('⚠️ Failed to log interaction to Supabase:', interactionError.message);
@@ -358,16 +366,16 @@ async function processTextMessage(senderId, text, session) {
         
         // Check if there's a pending image to send (from function call)
         if (global.pendingImageSend) {
-            console.log(`📤 Sending pending image: ${global.pendingImageSend.imageUrl}`);
+            console.log(`📤 Sending text first, then image: ${global.pendingImageSend.imageUrl}`);
             
-            // Send the image
+            // Send the text message first
+            await sendTextMessage(senderId, response);
+            
+            // Then send the image
             await sendImageMessage(senderId, global.pendingImageSend.imageUrl, global.pendingImageSend.caption);
             
             // Clear the pending image
             global.pendingImageSend = null;
-            
-            // Send a follow-up text message
-            await sendTextMessage(senderId, response);
         } else {
             // Check if AI wants to send an image via response JSON
             try {
@@ -526,7 +534,7 @@ async function sendWelcomeMessage(senderId) {
         const firstName = session?.userProfile?.first_name || 'Bonjour';
         
         const message = {
-            text: `${firstName}! 🌿 Bienvenue chez Lingerie Store Products!\n\nJe suis votre assistant virtuel et je suis là pour vous aider à découvrir nos produits biologiques de qualité premium.\n\nComment puis-je vous aider aujourd'hui?`,
+            text: `${firstName}! 🌿 Bienvenue chez Lingerie Store Products!\n\nJe suis votre assistant virtuel et je suis là pour vous aider à découvrir nos produits Lingerie.\n\nComment puis-je vous aider aujourd'hui?`,
             quick_replies: [
                 {
                     content_type: 'text',
@@ -555,7 +563,11 @@ async function sendWelcomeMessage(senderId) {
 // Send products list
 async function sendProductsList(senderId) {
     try {
-        const products = dbUtils.getAllProducts();
+        const products = await productService.getAllProducts();
+        if (products.length === 0) {
+            await sendTextMessage(senderId, 'Désolé, aucun produit n\'est disponible pour le moment.');
+            return;
+        }
         const topProducts = products.slice(0, 5);
         
         let productText = '🛍️ Voici nos produits les plus populaires:\n\n';

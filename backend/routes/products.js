@@ -65,10 +65,10 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/products/search - Search products
+// GET /api/products/search - Search products (with basic variant support)
 router.get('/search', async (req, res) => {
     try {
-        const { q, category, language, limit } = req.query;
+        const { q, category, language, limit, include_variants = 'true' } = req.query;
         
         if (!q) {
             return res.status(400).json({
@@ -84,6 +84,7 @@ router.get('/search', async (req, res) => {
             limit: parseInt(limit) || 10
         };
         
+        // Use the enhanced search that includes variant data by default
         const products = await productService.searchProducts(q, filters);
         
         res.json({
@@ -359,4 +360,124 @@ router.get('/:id/availability', async (req, res) => {
     }
 });
 
-export default router; 
+// GET /api/products/:id/variants - Get all variants for a product
+router.get('/:id/variants', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { available_only = 'true' } = req.query;
+        
+        const variants = await productService.getProductVariants(id, available_only === 'true');
+        
+        res.json({
+            success: true,
+            data: variants,
+            productId: id,
+            count: variants.length
+        });
+    } catch (error) {
+        console.error('Error fetching product variants:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch product variants',
+            message: error.message
+        });
+    }
+});
+
+// GET /api/products/:id/options - Get available colors and sizes for a product
+router.get('/:id/options', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        const options = await productService.getProductOptions(id);
+        
+        res.json({
+            success: true,
+            data: options,
+            productId: id
+        });
+    } catch (error) {
+        console.error('Error fetching product options:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch product options',
+            message: error.message
+        });
+    }
+});
+
+// GET /api/products/:id/variant - Get specific variant by color and size
+router.get('/:id/variant', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { color, size } = req.query;
+        
+        const variants = await productService.getSpecificVariant(id, color, size);
+        
+        if (!variants || variants.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: 'Variant not found',
+                message: `No variant found for product ${id}${color ? ` with color "${color}"` : ''}${size ? ` and size "${size}"` : ''}`
+            });
+        }
+        
+        res.json({
+            success: true,
+            data: variants.length === 1 ? variants[0] : variants,
+            productId: id,
+            filters: { color, size }
+        });
+    } catch (error) {
+        console.error('Error fetching specific variant:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch specific variant',
+            message: error.message
+        });
+    }
+});
+
+// GET /api/products/search/variants - Advanced search with variant filtering
+router.get('/search/variants', async (req, res) => {
+    try {
+        const { q, category, color, size, price_min, price_max, language, limit } = req.query;
+        
+        if (!q) {
+            return res.status(400).json({
+                success: false,
+                error: 'Search query is required',
+                message: 'Please provide a search query using the "q" parameter'
+            });
+        }
+        
+        const filters = {
+            category: category || null,
+            color: color || null,
+            size: size || null,
+            price_min: price_min ? parseFloat(price_min) : null,
+            price_max: price_max ? parseFloat(price_max) : null,
+            language: language || 'fr',
+            limit: parseInt(limit) || 10
+        };
+        
+        const products = await productService.searchProductsWithVariants(q, filters);
+        
+        res.json({
+            success: true,
+            data: products,
+            searchQuery: q,
+            resultsCount: products.length,
+            filters: filters
+        });
+    } catch (error) {
+        console.error('Error searching products with variants:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Advanced search failed',
+            message: error.message
+        });
+    }
+});
+
+export default router;

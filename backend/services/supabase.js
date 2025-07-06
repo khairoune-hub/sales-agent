@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { storageService } from './supabase-storage.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -89,6 +90,16 @@ export const productService = {
                     image_url,
                     alt_text,
                     is_primary
+                ),
+                product_variants (
+                    id,
+                    size,
+                    color,
+                    color_ar,
+                    price,
+                    stock_quantity,
+                    variant_sku,
+                    is_available
                 )
             `)
             .eq('is_active', active)
@@ -116,6 +127,11 @@ export const productService = {
         }
 
         return data;
+    },
+
+    // Alias for compatibility with existing code
+    async getAllProducts(filters = {}) {
+        return this.getProducts(filters);
     },
 
     // Get single product by ID
@@ -158,7 +174,8 @@ export const productService = {
             throw error;
         }
 
-        return data;
+        // Enhance product with storage URLs
+        return this.enhanceProductWithStorageUrls(data);
     },
 
     // Search products
@@ -166,20 +183,151 @@ export const productService = {
         const client = getSupabase();
         if (!client) throw new Error('Supabase not initialized');
 
-        const { data, error } = await client
-            .rpc('search_products', {
-                search_query: searchQuery,
-                category_filter: filters.category || null,
-                language_filter: filters.language || 'fr',
-                max_results: filters.limit || 10
-            });
+        // Use fallback method directly since it includes product_images properly
+        // The RPC function only returns image_url, not the full product_images array
+        return await this.searchProductsFallback(searchQuery, filters);
+        
+        /* Original RPC approach - commenting out due to image data issues
+        try {
+            const { data, error } = await client
+                .rpc('search_products', {
+                    search_query: searchQuery,
+                    category_filter: filters.category || null,
+                    language_filter: filters.language || 'fr',
+                    max_results: filters.limit || 10
+                });
+
+            if (error) {
+                console.error('Error searching products with RPC:', error);
+                
+                // If it's a function structure error, fall back to direct query
+                if (error.code === '42804' || error.message.includes('does not match function result type')) {
+                    console.log('🔄 Falling back to direct query due to function type mismatch');
+                    return await this.searchProductsFallback(searchQuery, filters);
+                }
+                
+                throw error;
+            }
+
+            return data;
+        } catch (rpcError) {
+            console.error('RPC search failed, using fallback:', rpcError.message);
+            return await this.searchProductsFallback(searchQuery, filters);
+        }
+        */
+    },
+
+    // Fallback search method using direct queries
+    async searchProductsFallback(searchQuery, filters = {}) {
+        const client = getSupabase();
+        if (!client) throw new Error('Supabase not initialized');
+
+        let query = client
+            .from('products')
+            .select(`
+                id,
+                name,
+                name_ar,
+                description,
+                base_price,
+                sale_price,
+                stock_quantity,
+                categories (
+                    name
+                ),
+                product_images (
+                    image_url,
+                    is_primary
+                ),
+                product_variants (
+                    id,
+                    size,
+                    color,
+                    color_ar,
+                    price,
+                    stock_quantity,
+                    variant_sku,
+                    is_available
+                )
+            `)
+            .eq('is_active', true);
+
+        // Add search conditions
+        if (searchQuery) {
+            query = query.or(
+                `name.ilike.%${searchQuery}%,name_ar.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`
+            );
+        }
+
+        // Add category filter
+        if (filters.category) {
+            query = query.eq('categories.slug', filters.category);
+        }
+
+        // Add ordering and limit
+        query = query
+            .order('is_featured', { ascending: false })
+            .order('sales_count', { ascending: false })
+            .limit(filters.limit || 10);
+
+        const { data, error } = await query;
 
         if (error) {
-            console.error('Error searching products:', error);
+            console.error('Error in fallback search:', error);
             throw error;
         }
 
-        return data;
+        // Transform data to match expected format but preserve product_images and variants
+        return data.map(product => {
+            // Enhance product with storage URLs first
+            const enhancedProduct = this.enhanceProductWithStorageUrls(product);
+            
+            // Calculate available variants info
+            const availableVariants = enhancedProduct.product_variants?.filter(v => v.is_available && v.stock_quantity > 0) || [];
+            const availableColors = [...new Set(availableVariants.map(v => ({ 
+                name: v.color, 
+                name_ar: v.color_ar,
+                available: true 
+            })))];
+            const availableSizes = [...new Set(availableVariants.map(v => v.size))].filter(Boolean);
+            
+            // Get price range from variants
+            const variantPrices = availableVariants.map(v => v.price).filter(Boolean);
+            const minVariantPrice = variantPrices.length > 0 ? Math.min(...variantPrices) : null;
+            const maxVariantPrice = variantPrices.length > 0 ? Math.max(...variantPrices) : null;
+            
+            // Use variant price range if available, otherwise use base product price
+            const finalPrice = minVariantPrice || enhancedProduct.sale_price || enhancedProduct.base_price;
+            const priceRange = (minVariantPrice && maxVariantPrice && minVariantPrice !== maxVariantPrice) 
+                ? `${minVariantPrice} - ${maxVariantPrice}` 
+                : finalPrice;
+
+            return {
+                id: enhancedProduct.id,
+                name: enhancedProduct.name,
+                name_ar: enhancedProduct.name_ar,
+                description: enhancedProduct.description,
+                price: finalPrice,
+                price_range: priceRange,
+                base_price: enhancedProduct.base_price,
+                sale_price: enhancedProduct.sale_price,
+                stock_quantity: enhancedProduct.stock_quantity,
+                category_name: enhancedProduct.categories?.name || null,
+                // Keep the full product_images array for image functionality (now with storage URLs)
+                product_images: enhancedProduct.product_images || [],
+                // Also include flat image_url for backward compatibility
+                image_url: enhancedProduct.product_images?.find(img => img.is_primary)?.image_url || 
+                          enhancedProduct.product_images?.[0]?.image_url || null,
+                is_in_stock: enhancedProduct.stock_quantity > 0 || availableVariants.length > 0,
+                // Add variant information
+                has_variants: (enhancedProduct.product_variants?.length || 0) > 0,
+                available_variants: availableVariants,
+                available_colors: availableColors,
+                available_sizes: availableSizes,
+                variant_count: availableVariants.length,
+                relevance_score: 1.0 // Default score for fallback
+            };
+        });
     },
 
     // Get product availability
@@ -237,6 +385,190 @@ export const productService = {
         }
 
         return data;
+    },
+
+    // Get product variants for a specific product
+    async getProductVariants(productId, availableOnly = true) {
+        const client = getSupabase();
+        if (!client) throw new Error('Supabase not initialized');
+
+        let query = client
+            .from('product_variants')
+            .select(`
+                id,
+                size,
+                color,
+                color_ar,
+                price,
+                stock_quantity,
+                variant_sku,
+                is_available,
+                product_id
+            `)
+            .eq('product_id', productId)
+            .order('color')
+            .order('size');
+
+        if (availableOnly) {
+            query = query.eq('is_available', true).gt('stock_quantity', 0);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error fetching product variants:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    // Get available colors and sizes for a product
+    async getProductOptions(productId) {
+        const client = getSupabase();
+        if (!client) throw new Error('Supabase not initialized');
+
+        const variants = await this.getProductVariants(productId, true);
+
+        const colors = [...new Set(variants.map(v => ({
+            name: v.color,
+            name_ar: v.color_ar,
+            available_sizes: variants.filter(vr => vr.color === v.color).map(vr => vr.size)
+        })))];
+
+        const sizes = [...new Set(variants.map(v => v.size))].filter(Boolean);
+
+        const priceRange = variants.length > 0 ? {
+            min: Math.min(...variants.map(v => v.price)),
+            max: Math.max(...variants.map(v => v.price))
+        } : null;
+
+        return {
+            colors,
+            sizes,
+            price_range: priceRange,
+            total_variants: variants.length,
+            variants
+        };
+    },
+
+    // Get specific variant by product ID, color, and size
+    async getSpecificVariant(productId, color = null, size = null) {
+        const client = getSupabase();
+        if (!client) throw new Error('Supabase not initialized');
+
+        let query = client
+            .from('product_variants')
+            .select('*')
+            .eq('product_id', productId)
+            .eq('is_available', true)
+            .gt('stock_quantity', 0);
+
+        if (color) {
+            query = query.eq('color', color);
+        }
+
+        if (size) {
+            query = query.eq('size', size);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error fetching specific variant:', error);
+            throw error;
+        }
+
+        return data;
+    },
+
+    // Helper method to ensure product images use Supabase Storage URLs
+    enhanceProductWithStorageUrls(product) {
+        if (!product) return product;
+
+        // If product has no images, generate fallback URLs from storage
+        if (!product.product_images || product.product_images.length === 0) {
+            const fallbackUrl = storageService.getProductImageUrl(product.id, 'main.jpg');
+            product.product_images = [{
+                id: null,
+                image_url: fallbackUrl,
+                alt_text: product.name,
+                is_primary: true,
+                sort_order: 1
+            }];
+        } else {
+            // Enhance existing images with storage URLs if they're still using external URLs
+            product.product_images = product.product_images.map(image => {
+                if (image.image_url && (image.image_url.includes('unsplash.com') || !image.image_url.includes('supabase'))) {
+                    // Generate storage URL as fallback
+                    const storageUrl = storageService.getProductImageUrl(product.id, 'main.jpg');
+                    return {
+                        ...image,
+                        image_url: storageUrl,
+                        fallback_url: image.image_url // Keep original as fallback
+                    };
+                }
+                return image;
+            });
+        }
+
+        return product;
+    },
+
+    // Search products with variant-specific filtering
+    async searchProductsWithVariants(searchQuery, filters = {}) {
+        const client = getSupabase();
+        if (!client) throw new Error('Supabase not initialized');
+
+        const { color, size, price_min, price_max, ...otherFilters } = filters;
+
+        // First get products matching the basic search
+        const products = await this.searchProductsFallback(searchQuery, otherFilters);
+
+        // If no variant-specific filters, return as is
+        if (!color && !size && !price_min && !price_max) {
+            return products;
+        }
+
+        // Filter products based on variant availability
+        const filteredProducts = products.filter(product => {
+            if (!product.has_variants) return false;
+
+            const matchingVariants = product.available_variants.filter(variant => {
+                let matches = true;
+
+                if (color && variant.color !== color) matches = false;
+                if (size && variant.size !== size) matches = false;
+                if (price_min && variant.price < price_min) matches = false;
+                if (price_max && variant.price > price_max) matches = false;
+
+                return matches;
+            });
+
+            if (matchingVariants.length > 0) {
+                // Update the product to show only matching variants
+                product.available_variants = matchingVariants;
+                product.available_colors = [...new Set(matchingVariants.map(v => ({ 
+                    name: v.color, 
+                    name_ar: v.color_ar 
+                })))];
+                product.available_sizes = [...new Set(matchingVariants.map(v => v.size))];
+                product.variant_count = matchingVariants.length;
+
+                // Update price to reflect filtered variants
+                const variantPrices = matchingVariants.map(v => v.price);
+                product.price = Math.min(...variantPrices);
+                product.price_range = variantPrices.length > 1 
+                    ? `${Math.min(...variantPrices)} - ${Math.max(...variantPrices)}`
+                    : product.price;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        return filteredProducts;
     }
 };
 
@@ -781,4 +1113,4 @@ export default {
     orderService,
     interactionService,
     analyticsService
-}; 
+};

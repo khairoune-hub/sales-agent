@@ -197,21 +197,24 @@ export const googleSheetsService = {
         try {
             const spreadsheetId = getSpreadsheetId();
             
-            // Find the order row
+            // Find the order row - using correct range A:T to match our 20-column structure
             const findResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: 'Orders!A:M'
+                range: 'Orders!A:T'
             });
 
             const rows = findResponse.data.values;
             if (!rows) return false;
 
-            // Find the row with matching order ID
+            // Find the row with matching order ID (first column)
             const rowIndex = rows.findIndex(row => row[0] === orderId);
             if (rowIndex === -1) return false;
 
-            // Update the status column (column L, index 11)
-            const updateRange = `Orders!L${rowIndex + 1}`;
+            // Update the status column (column O, index 14 - based on SHEET_STRUCTURE.orders.headers)
+            // Headers: Order ID(A), Order Number(B), Date & Time(C), Customer Name(D), Customer Phone(E),
+            // Customer Email(F), Platform(G), Platform ID(H), Wilaya(I), Address(J),
+            // Products(K), Quantities(L), Unit Prices(M), Total Amount(N), Status(O) <- column 15, index 14
+            const updateRange = `Orders!O${rowIndex + 1}`;
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
                 range: updateRange,
@@ -245,24 +248,23 @@ export const googleSheetsService = {
             const spreadsheetId = getSpreadsheetId();
             const range = `${SHEET_STRUCTURE.customers.name}!A:O`;
 
-            // Prepare enhanced customer data
+            // Prepare enhanced customer data - aligning with SHEET_STRUCTURE.customers.headers (15 columns)
             const customerRow = [
-                customer.id,
-                customer.name || '',
-                customer.phone || '',
-                customer.email || '',
-                customer.platform_type || '',
-                customer.platform_id || '',
-                customer.wilaya || '',
-                customer.address || '',
-                customer.preferred_language || 'fr',
-                customer.total_orders || 0,
-                customer.total_spent || 0,
-                customer.is_vip ? 'Yes' : 'No',
-                customer.first_contact_date ? new Date(customer.first_contact_date).toLocaleString('fr-FR') : '',
-                customer.last_contact_date ? new Date(customer.last_contact_date).toLocaleString('fr-FR') : '',
-                customer.last_order_date ? new Date(customer.last_order_date).toLocaleString('fr-FR') : '',
-                customer.notes || ''
+                customer.id,                    // Customer ID
+                customer.name || '',            // Name  
+                customer.phone || '',           // Phone
+                customer.email || '',           // Email
+                customer.platform_type || '',   // Platform
+                customer.platform_id || '',     // Platform ID
+                customer.wilaya || '',          // Wilaya
+                customer.address || '',         // Address
+                customer.preferred_language || 'fr', // Language
+                customer.total_orders || 0,     // Total Orders
+                customer.total_spent || 0,      // Total Spent
+                customer.is_vip ? 'Yes' : 'No', // Is VIP
+                customer.first_contact_date ? new Date(customer.first_contact_date).toLocaleString('fr-FR') : '', // First Contact
+                customer.last_contact_date ? new Date(customer.last_contact_date).toLocaleString('fr-FR') : '',  // Last Contact
+                customer.last_order_date ? new Date(customer.last_order_date).toLocaleString('fr-FR') : ''       // Last Order Date
             ];
 
             // Ensure headers exist
@@ -298,33 +300,19 @@ export const googleSheetsService = {
         }
 
         try {
-            // Check if Orders sheet exists and has headers
+            // Check if Orders sheet exists and has headers - Using full range A1:T1 for 20 columns
             const response = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: 'Orders!A1:M1'
+                range: 'Orders!A1:T1'
             });
 
             if (!response.data.values || response.data.values.length === 0) {
-                // Add headers
-                const headers = [
-                    'ID Commande',
-                    'Date Création',
-                    'Nom Client',
-                    'Téléphone',
-                    'Email',
-                    'Wilaya',
-                    'Adresse',
-                    'Produit',
-                    'Quantité',
-                    'Prix Unitaire',
-                    'Montant Total',
-                    'Statut',
-                    'Notes'
-                ];
+                // Use the standardized headers from SHEET_STRUCTURE
+                const headers = SHEET_STRUCTURE.orders.headers;
 
                 await sheets.spreadsheets.values.update({
                     spreadsheetId,
-                    range: 'Orders!A1:M1',
+                    range: 'Orders!A1:T1',
                     valueInputOption: 'USER_ENTERED',
                     resource: {
                         values: [headers]
@@ -355,26 +343,19 @@ export const googleSheetsService = {
         }
 
         try {
+            // Check if Customers sheet exists and has headers - Using full range A1:O1 for 15 columns
             const response = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: 'Customers!A1:H1'
+                range: 'Customers!A1:O1'
             });
 
             if (!response.data.values || response.data.values.length === 0) {
-                const headers = [
-                    'ID Client',
-                    'Date Création',
-                    'Nom',
-                    'Téléphone',
-                    'Email',
-                    'Wilaya',
-                    'Adresse',
-                    'Notes'
-                ];
+                // Use the standardized headers from SHEET_STRUCTURE
+                const headers = SHEET_STRUCTURE.customers.headers;
 
                 await sheets.spreadsheets.values.update({
                     spreadsheetId,
-                    range: 'Customers!A1:H1',
+                    range: 'Customers!A1:O1',
                     valueInputOption: 'USER_ENTERED',
                     resource: {
                         values: [headers]
@@ -706,10 +687,252 @@ export const googleSheetsService = {
         } catch (error) {
             console.error('❌ Error ensuring all sheet headers:', error.message);
         }
+    },
+
+    // Test and verify Google Sheets integration
+    verifyIntegration: async () => {
+        console.log('\n🔍 === GOOGLE SHEETS INTEGRATION VERIFICATION ===');
+        
+        const spreadsheetId = getSpreadsheetId();
+        
+        const verificationResults = {
+            initialization: false,
+            spreadsheetAccess: false,
+            orderSheetStructure: false,
+            customerSheetStructure: false,
+            testDataWrite: false,
+            issues: []
+        };
+
+        try {
+            // 1. Check initialization
+            const initialized = await initializeGoogleSheets();
+            verificationResults.initialization = initialized;
+            console.log(`✅ Initialization: ${initialized ? 'PASSED' : 'FAILED'}`);
+            
+            if (!initialized) {
+                verificationResults.issues.push('Google Sheets service failed to initialize');
+                return verificationResults;
+            }
+
+            // 2. Check spreadsheet access
+            try {
+                const spreadsheetInfo = await sheets.spreadsheets.get({ spreadsheetId });
+                verificationResults.spreadsheetAccess = true;
+                console.log(`✅ Spreadsheet Access: PASSED - ${spreadsheetInfo.data.properties.title}`);
+            } catch (error) {
+                verificationResults.issues.push(`Cannot access spreadsheet: ${error.message}`);
+                console.log(`❌ Spreadsheet Access: FAILED - ${error.message}`);
+            }
+
+            // 3. Verify Orders sheet structure
+            try {
+                await googleSheetsService.ensureHeaders(spreadsheetId);
+                
+                const ordersResponse = await sheets.spreadsheets.values.get({
+                    spreadsheetId,
+                    range: 'Orders!A1:T1'
+                });
+
+                const ordersHeaders = ordersResponse.data.values?.[0] || [];
+                const expectedOrdersHeaders = SHEET_STRUCTURE.orders.headers;
+                
+                const ordersMatch = ordersHeaders.length === expectedOrdersHeaders.length;
+                verificationResults.orderSheetStructure = ordersMatch;
+                
+                console.log(`${ordersMatch ? '✅' : '❌'} Orders Sheet Structure: ${ordersMatch ? 'PASSED' : 'FAILED'}`);
+                console.log(`   Expected: ${expectedOrdersHeaders.length} columns`);
+                console.log(`   Found: ${ordersHeaders.length} columns`);
+                
+                if (!ordersMatch) {
+                    verificationResults.issues.push(`Orders headers mismatch - Expected: ${expectedOrdersHeaders.length}, Found: ${ordersHeaders.length}`);
+                    console.log(`   Expected Headers: ${expectedOrdersHeaders.join(', ')}`);
+                    console.log(`   Found Headers: ${ordersHeaders.join(', ')}`);
+                }
+            } catch (error) {
+                verificationResults.issues.push(`Orders sheet verification failed: ${error.message}`);
+                console.log(`❌ Orders Sheet Structure: FAILED - ${error.message}`);
+            }
+
+            // 4. Verify Customers sheet structure
+            try {
+                await googleSheetsService.ensureCustomerHeaders(spreadsheetId);
+                
+                const customersResponse = await sheets.spreadsheets.values.get({
+                    spreadsheetId,
+                    range: 'Customers!A1:O1'
+                });
+
+                const customersHeaders = customersResponse.data.values?.[0] || [];
+                const expectedCustomersHeaders = SHEET_STRUCTURE.customers.headers;
+                
+                const customersMatch = customersHeaders.length === expectedCustomersHeaders.length;
+                verificationResults.customerSheetStructure = customersMatch;
+                
+                console.log(`${customersMatch ? '✅' : '❌'} Customers Sheet Structure: ${customersMatch ? 'PASSED' : 'FAILED'}`);
+                console.log(`   Expected: ${expectedCustomersHeaders.length} columns`);
+                console.log(`   Found: ${customersHeaders.length} columns`);
+                
+                if (!customersMatch) {
+                    verificationResults.issues.push(`Customers headers mismatch - Expected: ${expectedCustomersHeaders.length}, Found: ${customersHeaders.length}`);
+                    console.log(`   Expected Headers: ${expectedCustomersHeaders.join(', ')}`);
+                    console.log(`   Found Headers: ${customersHeaders.join(', ')}`);
+                }
+            } catch (error) {
+                verificationResults.issues.push(`Customers sheet verification failed: ${error.message}`);
+                console.log(`❌ Customers Sheet Structure: FAILED - ${error.message}`);
+            }
+
+            // 5. Test data write (dry run)
+            try {
+                const testOrder = {
+                    id: 'TEST_ORDER_' + Date.now(),
+                    order_number: 'TEST_001',
+                    created_at: new Date().toISOString(),
+                    customers: { 
+                        name: 'Test Customer', 
+                        phone: '+213123456789', 
+                        email: 'test@example.com',
+                        platform_id: 'test_platform_id'
+                    },
+                    platform_type: 'test',
+                    wilaya: 'Alger',
+                    shipping_address: 'Test Address',
+                    order_items: [{ 
+                        products: { name: 'Test Product' }, 
+                        quantity: 1, 
+                        unit_price: 100 
+                    }],
+                    total_amount: 100,
+                    status: 'pending',
+                    payment_status: 'pending',
+                    notes: 'Test order for verification',
+                    sales_agent: 'system_test',
+                    confirmed_at: null,
+                    confirmed_by: null
+                };
+
+                // Don't actually write, just validate the data structure
+                const products = testOrder.order_items?.map(item => item.products?.name || item.product_name).join(', ') || '';
+                const quantities = testOrder.order_items?.map(item => item.quantity).join(', ') || '';
+                const unitPrices = testOrder.order_items?.map(item => item.unit_price).join(', ') || '';
+
+                const orderRow = [
+                    testOrder.id,
+                    testOrder.order_number,
+                    new Date(testOrder.created_at).toLocaleString('fr-FR'),
+                    testOrder.customers?.name || testOrder.customer_name || '',
+                    testOrder.customers?.phone || testOrder.phone || '',
+                    testOrder.customers?.email || testOrder.email || '',
+                    testOrder.platform_type || '',
+                    testOrder.customers?.platform_id || '',
+                    testOrder.wilaya || '',
+                    testOrder.shipping_address || '',
+                    products,
+                    quantities,
+                    unitPrices,
+                    testOrder.total_amount,
+                    testOrder.status,
+                    testOrder.payment_status || '',
+                    testOrder.notes || '',
+                    testOrder.sales_agent || '',
+                    testOrder.confirmed_at ? new Date(testOrder.confirmed_at).toLocaleString('fr-FR') : '',
+                    testOrder.confirmed_by || ''
+                ];
+
+                const expectedLength = SHEET_STRUCTURE.orders.headers.length;
+                const actualLength = orderRow.length;
+                
+                verificationResults.testDataWrite = expectedLength === actualLength;
+                console.log(`${verificationResults.testDataWrite ? '✅' : '❌'} Test Data Structure: ${verificationResults.testDataWrite ? 'PASSED' : 'FAILED'}`);
+                console.log(`   Expected data fields: ${expectedLength}`);
+                console.log(`   Actual data fields: ${actualLength}`);
+                
+                if (!verificationResults.testDataWrite) {
+                    verificationResults.issues.push(`Data structure mismatch - Expected: ${expectedLength} fields, Actual: ${actualLength} fields`);
+                }
+            } catch (error) {
+                verificationResults.issues.push(`Test data structure validation failed: ${error.message}`);
+                console.log(`❌ Test Data Structure: FAILED - ${error.message}`);
+            }
+
+        } catch (error) {
+            verificationResults.issues.push(`Verification process failed: ${error.message}`);
+            console.log(`❌ Verification process failed: ${error.message}`);
+        }
+
+        // Summary
+        console.log('\n📊 === VERIFICATION SUMMARY ===');
+        const allPassed = Object.values(verificationResults).every(result => 
+            typeof result === 'boolean' ? result : true
+        ) && verificationResults.issues.length === 0;
+        
+        console.log(`Overall Status: ${allPassed ? '✅ ALL TESTS PASSED' : '❌ ISSUES FOUND'}`);
+        
+        if (verificationResults.issues.length > 0) {
+            console.log('\n🚨 Issues to fix:');
+            verificationResults.issues.forEach((issue, index) => {
+                console.log(`   ${index + 1}. ${issue}`);
+            });
+        }
+        
+        console.log('=================================\n');
+        
+        return verificationResults;
+    },
+
+    // Fix Google Sheets structure
+    fixSheetStructure: async () => {
+        console.log('\n🔧 === FIXING GOOGLE SHEETS STRUCTURE ===');
+        
+        try {
+            const spreadsheetId = getSpreadsheetId();
+            
+            // Initialize if needed
+            if (!sheets) {
+                const initialized = await initializeGoogleSheets();
+                if (!initialized) {
+                    throw new Error('Cannot initialize Google Sheets service');
+                }
+            }
+
+            // Force recreate headers with correct structure
+            console.log('🔄 Updating Orders sheet headers...');
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: 'Orders!A1:T1',
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [SHEET_STRUCTURE.orders.headers]
+                }
+            });
+            console.log('✅ Orders headers updated');
+
+            console.log('🔄 Updating Customers sheet headers...');
+            await sheets.spreadsheets.values.update({
+                spreadsheetId,
+                range: 'Customers!A1:O1',
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [SHEET_STRUCTURE.customers.headers]
+                }
+            });
+            console.log('✅ Customers headers updated');
+
+            console.log('✅ Google Sheets structure fixed successfully!');
+            
+            // Run verification to confirm
+            console.log('\n🔍 Running verification to confirm fixes...');
+            return await googleSheetsService.verifyIntegration();
+
+        } catch (error) {
+            console.error('❌ Failed to fix Google Sheets structure:', error.message);
+            throw error;
+        }
     }
 };
 
 // Initialize on module load
 initializeGoogleSheets();
 
-export default googleSheetsService; 
+export default googleSheetsService;

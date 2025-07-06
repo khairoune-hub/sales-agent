@@ -21,7 +21,7 @@ console.log('===================================');
 try {
     console.log('1. Server Environment:');
     console.log(`   - NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`   - PORT: ${process.env.PORT || 3000}`);
+    console.log(`   - PORT: ${process.env.PORT || 8787}`);
     console.log(`   - Node Version: ${process.version}`);
     console.log(`   - Current Directory: ${process.cwd()}`);
 
@@ -142,12 +142,16 @@ import analyticsRoutes from './routes/analytics.js';
 import adminRoutes from './routes/admin.js';
 import webhookRoutes from './routes/webhook.js';
 import whatsappRoutes from './routes/whatsapp.js';
+import storageRoutes from './routes/storage.js';
 
 // Import services for initialization
 import { googleSheetsService } from './services/googleSheets.js';
 
 const app = express();
-const PORT = process.env.BACKEND_PORT || 8787;
+const PORT = process.env.PORT || process.env.BACKEND_PORT || 8787;
+
+// Trust proxy (for rate limiting behind reverse proxies)
+app.set('trust proxy', 1);
 
 // Security middleware
 app.use(helmet({
@@ -215,7 +219,7 @@ app.use(limiter);
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' 
         ? ['https://yourdomain.com', 'https://www.yourdomain.com']
-        : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:8080'],
+        : ['http://localhost:8787', 'http://127.0.0.1:8787', 'http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:8080'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -266,6 +270,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/chat', chatLimiter, chatRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/storage', storageRoutes);
 app.use('/webhook', webhookRoutes);
 app.use('/whatsapp', whatsappRoutes);
 
@@ -274,7 +279,7 @@ app.get('/api', (req, res) => {
     res.json({
         name: 'Lingerie Store Products API',
         version: '2.0.0',
-        description: 'Express.js backend for bio products sales platform',
+        description: 'Express.js backend for lingerie products sales platform',
         endpoints: {
             health: 'GET /health',
             products: {
@@ -323,6 +328,14 @@ app.get('/api', (req, res) => {
                 message: 'POST /whatsapp/webhook',
                 debug_sessions: 'GET /whatsapp/debug/sessions',
                 debug_config: 'GET /whatsapp/debug/config'
+            },
+            storage: {
+                info: 'GET /api/storage/info',
+                bucket: 'POST /api/storage/bucket',
+                upload: 'POST /api/storage/upload',
+                images: 'GET /api/storage/images',
+                delete: 'DELETE /api/storage/image/:filePath',
+                url: 'GET /api/storage/url/:productId'
             }
         },
         documentation: 'Visit /api for this documentation'

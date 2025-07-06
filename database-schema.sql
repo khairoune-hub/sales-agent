@@ -356,12 +356,12 @@ CREATE OR REPLACE FUNCTION search_products(
 )
 RETURNS TABLE (
     id UUID,
-    name TEXT,
-    name_ar TEXT,
+    name VARCHAR(255),
+    name_ar VARCHAR(255),
     description TEXT,
     price DECIMAL,
     stock_quantity INTEGER,
-    category_name TEXT,
+    category_name VARCHAR(100),
     image_url TEXT,
     is_in_stock BOOLEAN,
     relevance_score FLOAT
@@ -556,3 +556,18 @@ CREATE POLICY "Public can read product images" ON product_images
 
 -- Service role policies (full access for backend)
 -- Note: These will be configured in Supabase dashboard for the service role
+
+-- Function to increment a column value
+CREATE OR REPLACE FUNCTION increment(
+    table_name TEXT,
+    row_id UUID,
+    column_name TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    EXECUTE format('UPDATE %I SET %I = %I + 1 WHERE id = $1', table_name, column_name, column_name)
+    USING row_id;
+END;
+$$;

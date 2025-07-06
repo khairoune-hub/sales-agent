@@ -422,31 +422,104 @@ router.post('/test/google-sheets', async (req, res) => {
 });
 
 // ===================================
-// SEARCH FUNCTIONALITY
+// GOOGLE SHEETS VERIFICATION ROUTES
 // ===================================
 
-router.get('/search', async (req, res) => {
+// Verify Google Sheets integration
+router.get('/verify-google-sheets', async (req, res) => {
     try {
-        const { query, type, limit = 10 } = req.query;
-        const results = {};
-
-        if (!type || type === 'products') {
-            results.products = await productService.searchProducts(query, { limit });
-        }
-
-        if (!type || type === 'customers') {
-            results.customers = await customerService.searchCustomers(query, { limit });
-        }
-
-        if (!type || type === 'orders') {
-            results.orders = await orderService.searchOrders(query, { limit });
-        }
-
-        res.json({ success: true, data: results });
+        console.log('📊 Admin requested Google Sheets verification');
+        const verificationResults = await googleSheetsService.verifyIntegration();
+        
+        res.json({
+            success: true,
+            timestamp: new Date().toISOString(),
+            verification: verificationResults
+        });
     } catch (error) {
-        console.error('Search error:', error);
-        res.status(500).json({ success: false, error: error.message });
+        console.error('❌ Google Sheets verification failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 
-export default router; 
+// Fix Google Sheets structure
+router.post('/fix-google-sheets', async (req, res) => {
+    try {
+        console.log('🔧 Admin requested Google Sheets structure fix');
+        const fixResults = await googleSheetsService.fixSheetStructure();
+        
+        res.json({
+            success: true,
+            message: 'Google Sheets structure fixed successfully',
+            timestamp: new Date().toISOString(),
+            verification: fixResults
+        });
+    } catch (error) {
+        console.error('❌ Google Sheets fix failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// Test Google Sheets data write (dry run)
+router.post('/test-google-sheets-write', async (req, res) => {
+    try {
+        console.log('🧪 Admin requested Google Sheets write test');
+        
+        const testOrder = {
+            id: 'TEST_' + Date.now(),
+            order_number: 'ADMIN_TEST_' + Date.now(),
+            created_at: new Date().toISOString(),
+            customers: { 
+                name: 'Admin Test Customer', 
+                phone: '+213123456789', 
+                email: 'admin-test@example.com',
+                platform_id: 'admin_test_' + Date.now()
+            },
+            platform_type: 'admin_test',
+            wilaya: 'Alger',
+            shipping_address: 'Admin Test Address',
+            order_items: [{ 
+                products: { name: 'Admin Test Product' }, 
+                quantity: 1, 
+                unit_price: 999 
+            }],
+            total_amount: 999,
+            status: 'test',
+            payment_status: 'test',
+            notes: 'Admin test order - safe to delete',
+            sales_agent: 'admin_test',
+            confirmed_at: new Date().toISOString(),
+            confirmed_by: 'admin'
+        };
+
+        const result = await googleSheetsService.addOrder(testOrder);
+        
+        res.json({
+            success: true,
+            message: 'Test order written to Google Sheets successfully',
+            orderId: testOrder.id,
+            orderNumber: testOrder.order_number,
+            timestamp: new Date().toISOString(),
+            result
+        });
+    } catch (error) {
+        console.error('❌ Google Sheets write test failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// ===================================
+
+export default router;

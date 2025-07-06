@@ -105,10 +105,17 @@ function verifyWhatsAppSignature(req) {
     // Temporarily disable signature verification for testing
     console.log('⚠️ WhatsApp signature verification disabled for testing');
     return true;
+
+    // Check if in production mode
+    const isProduction = process.env.NODE_ENV === 'production';
     
     if (!config.WHATSAPP_APP_SECRET) {
-        console.log('⚠️ No WhatsApp app secret configured - skipping signature verification');
-        return true; // Allow in development
+        if (isProduction) {
+            console.error('❌ No WhatsApp app secret configured in production!');
+            return false;
+        }
+        console.log('⚠️ No WhatsApp app secret configured - skipping signature verification (development mode)');
+        return true;
     }
     
     const signature = req.headers['x-hub-signature-256'];
@@ -204,14 +211,16 @@ async function createWhatsAppSession(senderId) {
         // Create or get customer in Supabase
         let customer = null;
         try {
-            customer = await customerService.getOrCreateCustomer({
-                platform_id: senderId,
-                platform: 'whatsapp',
-                name: userProfile.name,
-                email: null,
-                phone: senderId,
-                profile_data: userProfile
-            });
+            customer = await customerService.getOrCreateCustomer(
+                senderId,
+                'whatsapp',
+                {
+                    name: userProfile.name,
+                    email: null,
+                    phone: senderId,
+                    language: 'fr'
+                }
+            );
             console.log(`✅ Customer created/retrieved: ${customer.name}`);
         } catch (supabaseError) {
             console.warn('⚠️ Supabase customer creation failed, using session-only data:', supabaseError.message);
@@ -270,19 +279,17 @@ async function processWhatsAppTextMessage(senderId, text, session, phoneNumberId
         try {
             // Log to Supabase interaction service
             if (session.customer) {
-                await interactionService.logInteraction({
-                    customer_id: session.customer.id,
-                    platform: 'whatsapp',
-                    interaction_type: 'message',
-                    message: text,
-                    ai_response: response,
-                    metadata: {
+                await interactionService.logInteraction(
+                    session.customer.id,
+                    {
+                        platformType: 'whatsapp',
+                        type: 'message',
+                        message: text,
+                        aiResponse: response,
                         threadId: session.threadId,
-                        messageCount: session.messageCount,
-                        phoneNumberId: phoneNumberId,
                         language: detectLanguage(text)
                     }
-                });
+                );
             }
         } catch (interactionError) {
             console.warn('⚠️ Failed to log interaction to Supabase:', interactionError.message);

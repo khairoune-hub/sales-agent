@@ -2,6 +2,85 @@
 // Pure API backend for bio products sales
 
 import { OpenAI } from 'openai';
+import { createClient } from '@supabase/supabase-js';
+import { SYSTEM_CONTEXT } from './SYSTEM_CONTEXT.js';
+
+// Assistant configuration
+const ASSISTANT_ID = process.env.ASSISTANT_ID || 'asst_0nGWVax2ikC68QVBvZMLPVlQ';
+
+// Initialize Supabase client for product data
+let supabaseClient = null;
+const getSupabaseClient = (env) => {
+    if (!supabaseClient && env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY) {
+        supabaseClient = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
+    }
+    return supabaseClient;
+};
+
+// Fetch products from database
+async function fetchProductsFromDatabase(env) {
+    const supabase = getSupabaseClient(env);
+    
+    if (!supabase) {
+        console.warn('⚠️ Supabase not configured, returning empty product list');
+        // Return empty products object when Supabase is not available
+        // Agent should use dynamic functions to get products
+        return {};
+    }
+    
+    try {
+        const { data: products, error } = await supabase
+            .from('products')
+            .select('*')
+            .eq('is_active', true);
+            
+        if (error) throw error;
+        
+        // Convert array to object keyed by product ID or slug
+        const productsMap = {};
+        products.forEach(product => {
+            const key = product.slug || product.id;
+            productsMap[key] = {
+                id: product.id,
+                name: product.name,
+                price: product.price,
+                stock: product.stock_quantity || 0,
+                category: product.category_name || 'Général',
+                description: product.description || '',
+                sizes: product.available_sizes || [],
+                colors: product.available_colors || []
+            };
+        });
+        
+        console.log(`✅ Loaded ${Object.keys(productsMap).length} products from database`);
+        return productsMap;
+        
+    } catch (error) {
+        console.error('❌ Error fetching products from database:', error);
+        // Return empty object on error
+        return {};
+    }
+}
+
+// Cache products for performance
+let cachedProducts = null;
+let cacheTimestamp = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+async function getProducts(env) {
+    const now = Date.now();
+    
+    // Return cached products if still valid
+    if (cachedProducts && (now - cacheTimestamp) < CACHE_DURATION) {
+        return cachedProducts;
+    }
+    
+    // Fetch fresh products
+    cachedProducts = await fetchProductsFromDatabase(env);
+    cacheTimestamp = now;
+    
+    return cachedProducts;
+}
 
 // JWT utility functions for Google Sheets authentication
 function base64UrlEncode(str) {
@@ -193,6 +272,8 @@ async function addOrderToSheet(order, env) {
 // Function implementations
 const functions = {
     check_product_availability: async ({ product_name }, env) => {
+        // Get products from database
+        const products = await getProducts(env);
         // Product search logic
         let product = null;
         const searchTerm = product_name.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -200,8 +281,8 @@ const functions = {
         
         // Try exact match first
         const exactKey = searchTerm.replace(/\s+/g, '-');
-        if (product) {
-            product = product;
+        if (products[exactKey]) {
+            product = products[exactKey];
         }
         
         // Fuzzy matching if no exact match
@@ -209,7 +290,7 @@ const functions = {
             let bestMatch = null;
             let bestScore = 0;
             
-            Object.entries(bioProductsData).forEach(([key, prod]) => {
+            Object.entries(products).forEach(([key, prod]) => {
                 const productName = prod.name.toLowerCase();
                 const productKeywords = productName.split(/[\s-]+/);
                 
@@ -223,10 +304,10 @@ const functions = {
                             }
                         });
                         
-                        // Special product term matching
-                        if (keyword === 'omega' && productName.includes('oméga')) score += 10;
-                        if (keyword === 'protéine' && productName.includes('protéines')) score += 10;
-                        if (keyword === 'protein' && productName.includes('protéines')) score += 10;
+                        // Special product term matching for lingerie
+                        if (keyword === 'push' && productName.includes('push')) score += 10;
+                        if (keyword === 'dentelle' && productName.includes('dentelle')) score += 10;
+                        if (keyword === 'coton' && productName.includes('coton')) score += 10;
                         // Add more special cases as needed
                     }
                 });
@@ -247,13 +328,15 @@ const functions = {
         }
         
         if (!product) {
-            return `❌ Product "${product_name}" not found.`;
+            return `❌ Produit "${product_name}" non trouvé.`;
         }
         
         if (product.stock > 0) {
-            return `✅ ${product.name} is in stock!\n💰 Price: ${product.price.toFixed(2)} DA\n📦 Stock: ${product.stock} units\n🌿 Category: ${product.category}`;
+            const sizesText = product.sizes && product.sizes.length > 0 ? `\n📏 Tailles: ${product.sizes.join(', ')}` : '';
+            const colorsText = product.colors && product.colors.length > 0 ? `\n🎨 Couleurs: ${product.colors.join(', ')}` : '';
+            return `✅ ${product.name} est en stock!\n💰 Prix: ${product.price.toFixed(2)} €\n📦 Stock: ${product.stock} unités${sizesText}${colorsText}\n👙 Catégorie: ${product.category}`;
         } else {
-            return `❌ ${product.name} is currently out of stock.`;
+            return `❌ ${product.name} est actuellement en rupture de stock.`;
         }
     },
 
@@ -299,14 +382,14 @@ const functions = {
             return `❌ Missing required fields: ${missing.join(', ')}`;
         }
         
-        // Find product with better matching for honey/miel
-        const products = bioProductsData;
+        // Get products from database
+        const products = await getProducts(env);
         let product = null;
         
-        // Special handling for honey/miel orders
+        // Special handling for common product names
         const lowerProductName = product_name.toLowerCase();
-        if (lowerProductName.includes('miel') || lowerProductName.includes('honey')) {
-            product = products['miel-biologique']; // Direct match to our honey product
+        if (lowerProductName.includes('push') || lowerProductName.includes('push-up')) {
+            product = products['push-up-rose']; // Direct match to push-up products
         } else {
             // Try exact key match first
             const searchTerm = product_name.toLowerCase().replace(/\s+/g, '-');
@@ -326,7 +409,7 @@ const functions = {
         }
         
         if (!product) {
-            return `❌ Product "${product_name}" not found. Available products:\n${Object.values(products).map(p => `• ${p.name}: ${p.price.toFixed(2)} DA`).join('\n')}`;
+            return `❌ Produit "${product_name}" non trouvé. Produits disponibles:\n${Object.values(products).map(p => `• ${p.name}: ${p.price.toFixed(2)} €`).join('\n')}`;
         }
         
         // Default quantity to 1 if not specified or invalid
@@ -401,12 +484,18 @@ Merci de votre confiance en Lingerie Store Products ! 🌿`;
         const reportTime = new Date().toLocaleString('fr-FR', {
             timeZone: 'Africa/Algiers'
         });
+
+        // Get products from database
+        const products = await getProducts(env);
         
         let report = `📊 Lingerie Store Products Sales Report - ${reportTime}\n\n`;
-        report += `🌿 PRODUCTS AVAILABLE:\n`;
-        Object.values(bioProductsData).forEach(product => {
-            const emoji = product.category === 'Compléments' ? '💊' : product.category === 'Alimentation' ? '🍯' : '🍃';
-            report += `${emoji} ${product.name}: ${product.price.toFixed(2)} DA (Stock: ${product.stock})\n`;
+        report += `👙 PRODUCTS AVAILABLE:\n`;
+        Object.values(products).forEach(product => {
+            const emoji = product.category === 'Soutiens-gorge' ? '👙' : 
+                         product.category === 'Culottes' ? '🩲' : 
+                         product.category === 'Ensembles' ? '👗' : 
+                         product.category === 'Nuisettes' ? '👘' : '💋';
+            report += `${emoji} ${product.name}: ${product.price.toFixed(2)} € (Stock: ${product.stock})\n`;
         });
         
         report += `\n💰 SYSTEM STATUS:\n`;
@@ -444,73 +533,10 @@ class CloudflareSalesAssistant {
                 content: message
             });
 
-            // Step 3: Create run with optimized instructions
+            // Step 3: Create run with dynamic instructions from SYSTEM_CONTEXT
             const run = await this.openai.beta.threads.runs.create(threadId, {
                 assistant_id: this.assistantId,
-                instructions: `Tu es un assistant commercial expert pour une boutique de lingerie féminine, spécialisé dans les soutiens-gorge, culottes, ensembles et vêtements de nuit.
-
-PRODUITS DISPONIBLES:
-CATÉGORIES:
-1. SOUTIENS-GORGE:
-   - Soutien-gorge Push-up Dentelle Rose - 39.99€ - Effet push-up naturel, armatures confortables
-   - Soutien-gorge Sans Armatures Coton Bio - 29.99€ - Confort absolu, coton biologique
-   - Soutien-gorge Sport Performance - 34.99€ - Support optimal, évacuation humidité
-
-2. CULOTTES & SLIPS:
-   - Culotte Taille Haute Dentelle Noire - 24.99€ - Coupe flatteuse, finitions invisibles
-   - String Microfibre Nude - 16.99€ - Invisible sous les vêtements, confort discret
-
-3. ENSEMBLES:
-   - Ensemble Push-up Dentelle Rouge Passion - 59.99€ - Parfait pour occasions spéciales
-   - Ensemble Coton Bio Blanc Naturel - 49.99€ - Confort naturel au quotidien
-
-4. NUISETTES:
-   - Nuisette Satin Noir Élégante - 69.99€ - Nuits glamour, broderies délicates
-
-5. BODIES:
-   - Body Dentelle Transparent Blanc - 47.99€ - Design sensuel, fermeture pression
-
-6. LINGERIE SEXY:
-   - Porte-jarretelles Satin Rouge - 34.99€ - Accessoire indispensable pour tenues sexy
-
-7. GRANDES TAILLES:
-   - Soutien-gorge Grande Taille Dentelle Beige - 52.99€ - Support optimal pour grandes tailles
-   - Culotte Grande Taille Coton Doux - 29.99€ - Confort sans compromis
-
-TAILLES DISPONIBLES:
-- Soutiens-gorge: 85A, 85B, 90B, 90C, 95C, 100D
-- Culottes: S, M, L, XL
-- Ensembles: Toutes tailles assorties
-
-COULEURS DISPONIBLES:
-- Rose, Noir, Rouge, Blanc, Nude, Beige
-
-PROCESSUS DE COMMANDE:
-1. Présenter le produit et son prix
-2. Demander: NOM COMPLET du client
-3. Demander: NUMÉRO DE TÉLÉPHONE
-4. Demander: ADRESSE DE LIVRAISON
-5. Demander: TAILLE souhaitée (si applicable)
-6. Confirmer la commande avec tous les détails
-
-INSTRUCTIONS:
-- Sois chaleureux, professionnel et discret
-- Recommande des produits adaptés aux besoins et occasions
-- Explique les avantages (confort, qualité, style)
-- Pour les commandes, collecte OBLIGATOIREMENT: nom, téléphone, adresse, taille
-- Utilise la fonction save_order_data pour enregistrer les commandes
-- Réponds en français sauf si le client préfère l'arabe
-- Pose des questions pour mieux comprendre les besoins et occasions
-- Sois respectueux et professionnel dans tes réponses
-- Propose des ensembles assortis quand c'est approprié
-- Mentionne les promotions et prix réduits quand disponibles
-
-CONSEILS DE VENTE:
-- Demande l'occasion (quotidien, sport, occasion spéciale, soirée)
-- Suggère des ensembles assortis
-- Explique les matériaux et leurs avantages
-- Propose des tailles appropriées
-- Mentionne la disponibilité des couleurs`
+                instructions: SYSTEM_CONTEXT.fr // Use dynamic context instead of hardcoded
             });
 
             // Step 4: Wait for completion with optimized timing
