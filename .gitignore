@@ -11,6 +11,7 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 .dev.vars
+.dev.vars.example
 
 # Cloudflare Workers
 .wrangler/

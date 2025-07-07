@@ -7,15 +7,25 @@
   "scripts": {
     "dev": "nodemon backend/server.js",
     "start": "node backend/server.js",
+    "build": "echo 'Build complete - ready for Vercel deployment'",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "vercel:dev": "vercel dev",
+    "vercel:deploy": "vercel --prod",
+    "vercel:deploy:preview": "vercel",
     "frontend": "node serve-frontend.js",
     "frontend:build": "echo 'Static frontend - no build needed'",
-    "frontend:deploy": "vercel --prod",
     "dev:frontend": "node serve-frontend.js",
     "dev:both": "concurrently \"npm run dev\" \"npm run frontend\"",
-    "build": "echo 'Frontend build complete'",
-    "test": "echo \"Error: no test specified\" && exit 1",
     "cloudflare:dev": "wrangler dev",
-    "cloudflare:deploy": "wrangler deploy"
+    "cloudflare:deploy": "wrangler deploy --env production",
+    "cloudflare:deploy:staging": "wrangler deploy --env staging",
+    "cloudflare:setup": "./setup-secrets.sh",
+    "cloudflare:setup:staging": "./setup-secrets.sh staging",
+    "cloudflare:logs": "wrangler tail --env production",
+    "cloudflare:logs:staging": "wrangler tail --env staging",
+    "cloudflare:secrets": "wrangler secret list --env production",
+    "cloudflare:rollback": "wrangler rollback --env production",
+    "deploy:full": "./deploy-cloudflare.sh"
   },
   "keywords": [
     "bio-products",
@@ -44,7 +54,8 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "nodemon": "^3.0.2",
-    "wrangler": "^3.15.0"
+    "wrangler": "^3.78.0",
+    "@cloudflare/workers-types": "^4.20231218.0"
   },
   "engines": {
     "node": ">=18.0.0"

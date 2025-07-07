@@ -1,25 +1,64 @@
-name = "x-company-bio-products"
+name = "lingerie-sales-agent"
 main = "src/backend.js"
-compatibility_date = "2024-01-15"
+compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 [env.production]
-name = "x-company-bio-products-prod"
+name = "lingerie-sales-agent-prod"
 
 [env.staging]
-name = "x-company-bio-products-staging"
+name = "lingerie-sales-agent-staging"
 
-# Environment variables (loaded from .dev.vars in development)
+# Environment variables (set these in Cloudflare Dashboard or use wrangler secret)
 [vars]
-# These will be overridden by .dev.vars in development
-GOOGLE_SHEET_ID = "1gQUIKFwP1zNLYOnF_3Gc4u9X9WnZSpsS9KT31sW2jjA"
-GOOGLE_SERVICE_ACCOUNT_EMAIL = "agent-v1@agent-sheet-v1.iam.gserviceaccount.com"
+# App Configuration
+NODE_ENV = "production"
+APP_NAME = "Lingerie Sales Agent"
+APP_VERSION = "2.0.0"
+
+# Store Configuration
+STORE_NAME = "Lingerie Store"
+STORE_EMAIL = "contact@xcompany.com"
+DEFAULT_LANGUAGE = "ar"
+CURRENCY = "DZ"
+LOW_STOCK_THRESHOLD = "10"
+WELCOME_MESSAGE = "Bienvenue chez Lingerie Store!"
+
+# Google Sheets Configuration (use wrangler secret for sensitive data)
+GOOGLE_SHEETS_SPREADSHEET_ID = "1kFwIOYio_eIHWhtR0pplnhfzBjtqMoY-r5TWaeqiXfA"
+GOOGLE_SERVICE_ACCOUNT_EMAIL = "sheets-access-bot@sales-agent-464920.iam.gserviceaccount.com"
+
+# Note: Sensitive environment variables should be set using:
+# wrangler secret put OPENAI_API_KEY
+# wrangler secret put ASSISTANT_ID
+# wrangler secret put GOOGLE_SHEETS_PRIVATE_KEY
+# wrangler secret put GOOGLE_SHEETS_CLIENT_EMAIL
+# wrangler secret put MESSENGER_VERIFY_TOKEN
+# wrangler secret put MESSENGER_ACCESS_TOKEN
+# wrangler secret put MESSENGER_APP_SECRET
+# wrangler secret put WHATSAPP_VERIFY_TOKEN
+# wrangler secret put WHATSAPP_ACCESS_TOKEN
+# wrangler secret put WHATSAPP_APP_SECRET
+# wrangler secret put WHATSAPP_PHONE_NUMBER_ID
+# wrangler secret put WHATSAPP_BUSINESS_ACCOUNT_ID
+# wrangler secret put SUPABASE_URL
+# wrangler secret put SUPABASE_SERVICE_KEY
 
 # KV Namespaces for caching
 [[kv_namespaces]]
 binding = "CACHE"
 id = "9aa6aa3b4ed142ee9c096064b166cd6d"
 preview_id = "1734d35a8a3f45ff9cbe386ed845d7d7"
+
+# Durable Objects (if needed for session management)
+# [[durable_objects.bindings]]
+# name = "SESSIONS"
+# class_name = "SessionManager"
+
+# R2 Buckets for file storage (if using Cloudflare R2 instead of Supabase)
+# [[r2_buckets]]
+# binding = "PRODUCT_IMAGES"
+# bucket_name = "lingerie-product-images"
 
 # Build configuration
 [build]
@@ -28,4 +67,13 @@ command = "npm run build"
 # Development configuration
 [dev]
 port = 8787
-local_protocol = "http" 
+local_protocol = "http"
+
+# Custom domains (configure after deployment)
+# [route]
+# pattern = "api.yourdomain.com/*"
+# custom_domain = true
+
+# [route]
+# pattern = "yourdomain.com/*"
+# custom_domain = true 

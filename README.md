@@ -222,10 +222,16 @@ backend/
 │   ├── chat.js             # Chat endpoints
 │   ├── analytics.js        # Analytics endpoints
 │   ├── admin.js            # Admin endpoints
-│   └── webhook.js          # Webhook endpoints (Messenger)
+│   ├── storage.js          # Storage endpoints
+│   ├── webhook.js          # Webhook endpoints (Messenger)
+│   └── whatsapp.js         # whatsapp endpoints (whatsapp)
 └── services/
     ├── openai.js           # OpenAI integration
+    ├── openai-cache.js
+    ├── supabase.js
+    ├── supabase-storage.js
     └── googleSheets.js     # Google Sheets integration
+
 ```
 
 ### Database
