@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>X Company Produits Bio - Admin</title>
+    <title>X Company Produits Bio - Admin Dashboard</title>
     <style>
         * {
             margin: 0;
@@ -19,7 +19,7 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -31,49 +31,116 @@
             border-radius: 8px;
             margin-bottom: 20px;
             text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
 
         .header h1 {
-            font-size: 24px;
+            font-size: 28px;
             margin-bottom: 5px;
         }
 
         .header p {
             opacity: 0.9;
-            font-size: 14px;
+            font-size: 16px;
         }
 
         .backend-info {
             background: rgba(255,255,255,0.2);
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
-            font-size: 12px;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 14px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
         }
 
-        .admin-panel {
+        .backend-info .info-item {
+            text-align: center;
+        }
+
+        .backend-info .info-item strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .nav-tabs {
+            background: white;
+            border-radius: 8px;
+            padding: 0;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            overflow-x: auto;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .nav-tab:first-child {
+            border-radius: 8px 0 0 8px;
+        }
+
+        .nav-tab:last-child {
+            border-radius: 0 8px 8px 0;
+        }
+
+        .nav-tab.active {
+            background: #2D7D32;
+            color: white;
+        }
+
+        .nav-tab:hover:not(.active) {
+            background: #f0f0f0;
+        }
+
+        .tab-content {
+            display: none;
             background: white;
             border-radius: 8px;
             padding: 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
         }
 
-        .admin-buttons {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+        .tab-content.active {
+            display: block;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .section-header h2 {
+            color: #2D7D32;
+            font-size: 24px;
         }
 
         .btn {
-            padding: 12px 20px;
+            padding: 10px 20px;
             border: none;
             border-radius: 6px;
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
             text-align: center;
         }
 
@@ -104,140 +171,250 @@
             background: #f57c00;
         }
 
-        .chat-box {
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #d32f2f;
+        }
+
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
             background: white;
+            padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            overflow: hidden;
+            text-align: center;
         }
 
-        .chat-header {
-            background: #2D7D32;
-            color: white;
-            padding: 15px 20px;
-            font-weight: 500;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        .stat-card .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #2D7D32;
+            margin-bottom: 10px;
         }
 
-        .connection-status {
-            font-size: 12px;
+        .stat-card .stat-label {
+            color: #666;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .data-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2D7D32;
+        }
+
+        .data-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
             padding: 4px 8px;
             border-radius: 12px;
-            background: rgba(255,255,255,0.2);
+            font-size: 12px;
+            font-weight: 500;
+            text-transform: uppercase;
         }
 
-        .connection-status.connected {
-            background: #4CAF50;
+        .status-active {
+            background: #e8f5e8;
+            color: #2D7D32;
         }
 
-        .connection-status.disconnected {
-            background: #f44336;
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
         }
 
-        .chat-messages {
-            height: 400px;
-            overflow-y: auto;
-            padding: 20px;
-            background: #fafafa;
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
         }
 
-        .message {
-            margin-bottom: 15px;
+        .status-cancelled {
+            background: #f8d7da;
+            color: #721c24;
         }
 
-        .message.user {
-            text-align: right;
+        .status-low-stock {
+            background: #f8d7da;
+            color: #721c24;
         }
 
-        .message-content {
-            display: inline-block;
-            max-width: 80%;
-            padding: 10px 15px;
-            border-radius: 18px;
-            white-space: pre-wrap;
+        .form-group {
+            margin-bottom: 20px;
         }
 
-        .message.user .message-content {
-            background: #2D7D32;
-            color: white;
-        }
-
-        .message.assistant .message-content {
-            background: white;
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
             color: #333;
-            border: 1px solid #ddd;
         }
 
-        .chat-input {
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #eee;
-            display: flex;
-            gap: 10px;
-        }
-
-        .chat-input input {
-            flex: 1;
-            padding: 12px;
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 14px;
         }
 
-        .chat-input input:focus {
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
             outline: none;
             border-color: #2D7D32;
         }
 
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
         .loading {
-            display: none;
             text-align: center;
-            padding: 20px;
+            padding: 40px;
             color: #666;
         }
 
-        .loading.show {
+        .loading.active {
             display: block;
         }
 
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #ddd;
-            border-radius: 50%;
-            border-top-color: #2D7D32;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .config-panel {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 8px;
+        .error {
+            background: #f8d7da;
+            color: #721c24;
             padding: 15px;
+            border-radius: 6px;
             margin-bottom: 20px;
         }
 
-        .config-input {
-            width: 100%;
-            padding: 8px;
-            margin: 5px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+        .success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
         }
 
-        @media (max-width: 600px) {
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        .chart-container {
+            height: 300px;
+            margin: 20px 0;
+            background: #f8f9fa;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
             .container {
                 padding: 10px;
             }
-            
-            .admin-buttons {
+
+            .nav-tabs {
+                flex-direction: column;
+            }
+
+            .nav-tab {
+                border-radius: 0 !important;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .data-table {
+                font-size: 12px;
+            }
+
+            .form-row {
                 grid-template-columns: 1fr;
             }
         }
@@ -246,294 +423,838 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌿 X Company Produits Bio</h1>
-            <p>Interface d'Administration</p>
+            <h1>🌱 X Company Produits Bio</h1>
+            <p>Tableau de bord administrateur - Gestion complète du magasin</p>
             <div class="backend-info">
-                Backend API: <span id="backendUrl">https://x-company-bio-products.bcos-assistant.workers.dev</span>
+                <div class="info-item">
+                    <strong>Statut Backend</strong>
+                    <span id="backend-status">Vérification...</span>
+                </div>
+                <div class="info-item">
+                    <strong>Base de données</strong>
+                    <span id="database-status">Vérification...</span>
+                </div>
+                <div class="info-item">
+                    <strong>OpenAI</strong>
+                    <span id="openai-status">Vérification...</span>
+                </div>
+                <div class="info-item">
+                    <strong>Google Sheets</strong>
+                    <span id="sheets-status">Vérification...</span>
+                </div>
             </div>
         </div>
 
-        <div class="config-panel">
-            <h3>⚙️ Configuration Backend</h3>
-            <label>URL du Backend API:</label>
-            <input type="text" id="backendUrlInput" class="config-input" value="https://x-company-bio-products.bcos-assistant.workers.dev" placeholder="http://localhost:3000">
-            <button class="btn btn-warning" onclick="updateBackendUrl()">Mettre à jour</button>
-            <button class="btn btn-secondary" onclick="testConnection()">Tester Connexion</button>
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('dashboard')">📊 Tableau de bord</button>
+            <button class="nav-tab" onclick="showTab('products')">🛍️ Produits</button>
+            <button class="nav-tab" onclick="showTab('orders')">📦 Commandes</button>
+            <button class="nav-tab" onclick="showTab('customers')">👥 Clients</button>
+            <button class="nav-tab" onclick="showTab('inventory')">📋 Inventaire</button>
+            <button class="nav-tab" onclick="showTab('analytics')">📈 Analyses</button>
+            <button class="nav-tab" onclick="showTab('settings')">⚙️ Paramètres</button>
         </div>
 
-        <div class="admin-panel">
-            <h3 style="margin-bottom: 15px;">Actions Rapides</h3>
-            <div class="admin-buttons">
-                <button class="btn btn-secondary" onclick="chatUI.sendMessage('Montrer tous les produits bio')">
-                    📦 Voir Produits
-                </button>
-               
-                <button class="btn btn-primary" onclick="chatUI.generateSalesReport()">
-                    📊 Rapport Ventes
-                </button>
-
-                <button class="btn btn-warning" onclick="testEnvironment()">
-                    🧪 Test Environnement
-                </button>
-            </div>
-        </div>
-
-        <div class="chat-box">
-            <div class="chat-header">
-                <span>Assistant Produits Bio</span>
-                <span class="connection-status" id="connectionStatus">Déconnecté</span>
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="section-header">
+                <h2>📊 Tableau de bord</h2>
+                <button class="btn btn-secondary" onclick="refreshDashboard()">🔄 Actualiser</button>
             </div>
 
-            <div class="chat-messages" id="chatMessages">
-                <div class="message assistant">
-                    <div class="message-content">
-🌿 Bienvenue dans l'interface d'administration X Company Produits Bio !
-
-Je peux vous aider avec :
-• Voir l'inventaire des produits
-• Vérifier les niveaux de stock  
-• Générer des rapports de ventes
-• Gérer les commandes
-
-Que souhaitez-vous faire ?
-                    </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="total-products">-</div>
+                    <div class="stat-label">Produits</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="total-orders">-</div>
+                    <div class="stat-label">Commandes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="total-customers">-</div>
+                    <div class="stat-label">Clients</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="total-revenue">-</div>
+                    <div class="stat-label">Chiffre d'affaires</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="low-stock-count">-</div>
+                    <div class="stat-label">Stock faible</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="pending-orders">-</div>
+                    <div class="stat-label">Commandes en attente</div>
                 </div>
             </div>
 
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <span id="loadingText">Traitement en cours...</span>
+            <div class="chart-container">
+                📈 Graphique des ventes (prochainement)
             </div>
 
-            <div class="chat-input">
-                <input 
-                    type="text" 
-                    id="messageInput" 
-                    placeholder="Tapez votre message..."
-                    onkeypress="if(event.key==='Enter') chatUI.sendUserMessage()"
-                >
-                <button class="btn btn-primary" onclick="chatUI.sendUserMessage()">
-                    Envoyer
-                </button>
+            <h3>Activité récente</h3>
+            <div id="recent-activity">
+                <div class="loading">Chargement des données...</div>
+            </div>
+        </div>
+
+        <!-- Products Tab -->
+        <div id="products" class="tab-content">
+            <div class="section-header">
+                <h2>🛍️ Gestion des produits</h2>
+                <button class="btn btn-primary" onclick="showModal('product-modal')">+ Nouveau produit</button>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="product-search" placeholder="Rechercher des produits..." onkeyup="searchProducts()">
+                <select id="category-filter" onchange="filterProducts()">
+                    <option value="">Toutes les catégories</option>
+                </select>
+                <select id="stock-filter" onchange="filterProducts()">
+                    <option value="">Tous les stocks</option>
+                    <option value="in-stock">En stock</option>
+                    <option value="low-stock">Stock faible</option>
+                    <option value="out-of-stock">Rupture de stock</option>
+                </select>
+            </div>
+
+            <div id="products-list">
+                <div class="loading">Chargement des produits...</div>
+            </div>
+        </div>
+
+        <!-- Orders Tab -->
+        <div id="orders" class="tab-content">
+            <div class="section-header">
+                <h2>📦 Gestion des commandes</h2>
+                <button class="btn btn-secondary" onclick="refreshOrders()">🔄 Actualiser</button>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="order-search" placeholder="Rechercher des commandes..." onkeyup="searchOrders()">
+                <select id="order-status-filter" onchange="filterOrders()">
+                    <option value="">Tous les statuts</option>
+                    <option value="pending">En attente</option>
+                    <option value="processing">En traitement</option>
+                    <option value="completed">Terminée</option>
+                    <option value="cancelled">Annulée</option>
+                </select>
+                <select id="order-platform-filter" onchange="filterOrders()">
+                    <option value="">Toutes les plateformes</option>
+                    <option value="messenger">Messenger</option>
+                    <option value="whatsapp">WhatsApp</option>
+                </select>
+            </div>
+
+            <div id="orders-list">
+                <div class="loading">Chargement des commandes...</div>
+            </div>
+        </div>
+
+        <!-- Customers Tab -->
+        <div id="customers" class="tab-content">
+            <div class="section-header">
+                <h2>👥 Gestion des clients</h2>
+                <button class="btn btn-secondary" onclick="refreshCustomers()">🔄 Actualiser</button>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="customer-search" placeholder="Rechercher des clients..." onkeyup="searchCustomers()">
+                <select id="customer-platform-filter" onchange="filterCustomers()">
+                    <option value="">Toutes les plateformes</option>
+                    <option value="messenger">Messenger</option>
+                    <option value="whatsapp">WhatsApp</option>
+                </select>
+            </div>
+
+            <div id="customers-list">
+                <div class="loading">Chargement des clients...</div>
+            </div>
+        </div>
+
+        <!-- Inventory Tab -->
+        <div id="inventory" class="tab-content">
+            <div class="section-header">
+                <h2>📋 Gestion d'inventaire</h2>
+                <button class="btn btn-warning" onclick="updateAllStock()">⚠️ Mettre à jour le stock</button>
+            </div>
+
+            <div class="search-bar">
+                <input type="text" id="inventory-search" placeholder="Rechercher des produits..." onkeyup="searchInventory()">
+                <select id="inventory-filter" onchange="filterInventory()">
+                    <option value="">Tous les produits</option>
+                    <option value="low-stock">Stock faible</option>
+                    <option value="out-of-stock">Rupture de stock</option>
+                </select>
+            </div>
+
+            <div id="inventory-list">
+                <div class="loading">Chargement de l'inventaire...</div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analytics" class="tab-content">
+            <div class="section-header">
+                <h2>📈 Analyses et rapports</h2>
+                <button class="btn btn-secondary" onclick="generateReport()">📊 Générer rapport</button>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="weekly-sales">-</div>
+                    <div class="stat-label">Ventes cette semaine</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="monthly-sales">-</div>
+                    <div class="stat-label">Ventes ce mois</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="avg-order-value">-</div>
+                    <div class="stat-label">Valeur moyenne commande</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="top-product">-</div>
+                    <div class="stat-label">Produit le plus vendu</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                📊 Graphiques d'analyse (prochainement)
+            </div>
+
+            <div id="analytics-data">
+                <div class="loading">Chargement des analyses...</div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <div class="section-header">
+                <h2>⚙️ Paramètres système</h2>
+                <button class="btn btn-primary" onclick="saveSettings()">💾 Sauvegarder</button>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Nom du magasin</label>
+                    <input type="text" id="store-name" value="X Company Produits Bio">
+                </div>
+                <div class="form-group">
+                    <label>Email de contact</label>
+                    <input type="email" id="store-email" value="contact@xcompany.com">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Langue par défaut</label>
+                    <select id="default-language">
+                        <option value="fr">Français</option>
+                        <option value="ar">العربية</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Devise</label>
+                    <select id="currency">
+                        <option value="EUR">EUR (€)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="MAD">MAD (د.م.)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Seuil de stock faible</label>
+                <input type="number" id="low-stock-threshold" value="10">
+            </div>
+
+            <div class="form-group">
+                <label>Message de bienvenue</label>
+                <textarea id="welcome-message" rows="4">Bienvenue chez X Company ! Nous sommes spécialisés dans les produits bio de qualité. Comment puis-je vous aider aujourd'hui ?</textarea>
+            </div>
+
+            <h3>Intégrations</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Status Supabase</label>
+                    <input type="text" id="supabase-status" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Status OpenAI</label>
+                    <input type="text" id="openai-status-setting" readonly>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- Product Modal -->
+    <div id="product-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nouveau produit</h3>
+                <button class="modal-close" onclick="hideModal('product-modal')">&times;</button>
+            </div>
+            <form id="product-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Nom du produit *</label>
+                        <input type="text" id="product-name" required>
+                    </div>
+                    <div class="form-group">
+                        <label>SKU</label>
+                        <input type="text" id="product-sku">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="product-description" rows="3"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Prix *</label>
+                        <input type="number" id="product-price" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Catégorie</label>
+                        <select id="product-category">
+                            <option value="">Sélectionner une catégorie</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Stock initial</label>
+                        <input type="number" id="product-stock" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label>Unité</label>
+                        <select id="product-unit">
+                            <option value="piece">Pièce</option>
+                            <option value="kg">Kilogramme</option>
+                            <option value="g">Gramme</option>
+                            <option value="l">Litre</option>
+                            <option value="ml">Millilitre</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>URL de l'image</label>
+                    <input type="url" id="product-image">
+                </div>
+                <div class="form-group">
+                    <label>Produit actif</label>
+                    <select id="product-active">
+                        <option value="true">Actif</option>
+                        <option value="false">Inactif</option>
+                    </select>
+                </div>
+                <div style="text-align: right; margin-top: 20px;">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('product-modal')">Annuler</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
-        // Configuration
-        let BACKEND_URL = 'https://x-company-bio-products.bcos-assistant.workers.dev';
+        // Global variables
+        let currentData = {
+            products: [],
+            orders: [],
+            customers: [],
+            categories: [],
+            analytics: {}
+        };
 
-        function updateBackendUrl() {
-            const newUrl = document.getElementById('backendUrlInput').value.trim();
-            if (newUrl) {
-                BACKEND_URL = newUrl;
-                document.getElementById('backendUrl').textContent = BACKEND_URL;
-                updateConnectionStatus('disconnected');
-                console.log('Backend URL updated to:', BACKEND_URL);
-            }
-        }
-
-        function updateConnectionStatus(status) {
-            const statusEl = document.getElementById('connectionStatus');
-            statusEl.className = `connection-status ${status}`;
-            statusEl.textContent = status === 'connected' ? 'Connecté' : 'Déconnecté';
-        }
-
-        async function testConnection() {
-            try {
-                console.log('Testing connection to:', BACKEND_URL);
-                const response = await fetch(`${BACKEND_URL}/api/test-env`);
-                const data = await response.json();
-                
-                if (response.ok) {
-                    updateConnectionStatus('connected');
-                    alert(`✅ Connexion réussie!\n\nEnvironnement:\n- OpenAI: ${data.environment.hasOpenAI ? '✅' : '❌'}\n- Google Sheets: ${data.environment.hasSheetId ? '✅' : '❌'}\n- Service Account: ${data.environment.hasServiceAccount ? '✅' : '❌'}`);
-                } else {
-                    updateConnectionStatus('disconnected');
-                    alert('❌ Erreur de connexion: ' + data.error);
-                }
-            } catch (error) {
-                updateConnectionStatus('disconnected');
-                alert('❌ Impossible de se connecter au backend: ' + error.message);
-            }
-        }
-
-        async function testEnvironment() {
-            try {
-                const response = await fetch(`${BACKEND_URL}/api/test-env`);
-                const data = await response.json();
-                console.log('Environment test:', data);
-                
-                if (response.ok) {
-                    alert(`🧪 Test d'environnement:\n\n✅ Backend connecté\n- OpenAI API: ${data.environment.hasOpenAI ? '✅ Configuré' : '❌ Manquant'}\n- Google Sheets ID: ${data.environment.hasSheetId ? '✅ Configuré' : '❌ Manquant'}\n- Service Account: ${data.environment.hasServiceAccount ? '✅ Configuré' : '❌ Manquant'}\n- Private Key: ${data.environment.hasPrivateKey ? '✅ Configuré' : '❌ Manquant'}`);
-                } else {
-                    alert('❌ Erreur lors du test: ' + (data.error || 'Erreur inconnue'));
-                }
-            } catch (error) {
-                alert('❌ Erreur de connexion: ' + error.message);
-            }
-        }
-
-        class ChatUI {
-            constructor() {
-                this.threadId = null;
-                this.isInitialized = false;
-                this.isLoading = false;
-                this.init();
-            }
-
-            async init() {
-                try {
-                    await this.initializeAssistant();
-                    await this.createThread();
-                    this.isInitialized = true;
-                    updateConnectionStatus('connected');
-                    console.log('✅ Chat initialized successfully');
-                } catch (error) {
-                    console.error('❌ Initialization error:', error);
-                    updateConnectionStatus('disconnected');
-                    this.addMessage('Erreur d\'initialisation. Vérifiez la configuration du backend.', 'assistant');
-                }
-            }
-
-            async initializeAssistant() {
-                const response = await fetch(`${BACKEND_URL}/api/chat/initialize`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-                }
-                
-                return response.json();
-            }
-
-            async createThread() {
-                const response = await fetch(`${BACKEND_URL}/api/chat/start`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-                }
-                
-                const data = await response.json();
-                this.threadId = data.data.threadId;
-            }
-
-            async sendUserMessage() {
-                const input = document.getElementById('messageInput');
-                const message = input.value.trim();
-                
-                if (!message || this.isLoading) return;
-                
-                input.value = '';
-                this.addMessage(message, 'user');
-                await this.sendMessage(message);
-            }
-
-            async sendMessage(message, userType = null) {
-                if (!this.isInitialized || this.isLoading) {
-                    console.log('Cannot send message:', { initialized: this.isInitialized, loading: this.isLoading });
-                    return;
-                }
-                
-                this.setLoading(true, 'Envoi du message...');
-                
-                try {
-                    const requestBody = {
-                        threadId: this.threadId,
-                        message: message
-                    };
-                    
-                    if (userType) requestBody.userType = userType;
-                    
-                    // Progressive loading messages
-                    if (message.toLowerCase().includes('rapport') || message.toLowerCase().includes('sales')) {
-                        this.setLoading(true, 'Génération du rapport... 0%');
-                        setTimeout(() => this.setLoading(true, 'Analyse des données... 30%'), 300);
-                        setTimeout(() => this.setLoading(true, 'Calcul des métriques... 60%'), 800);
-                        setTimeout(() => this.setLoading(true, 'Finalisation... 90%'), 1500);
-                    } else if (message.toLowerCase().includes('produits')) {
-                        this.setLoading(true, 'Chargement des produits bio...');
-                    } else {
-                        this.setLoading(true, 'Traitement de votre demande...');
-                    }
-                    
-                    const response = await fetch(`${BACKEND_URL}/api/chat/message`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(requestBody)
-                    });
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`HTTP ${response.status}: ${errorText}`);
-                    }
-                    
-                    const data = await response.json();
-                    
-                    if (data.data && data.data.aiResponse) {
-                        this.addMessage(data.data.aiResponse, 'assistant');
-                        updateConnectionStatus('connected');
-                    } else {
-                        this.addMessage('Aucune réponse reçue du serveur.', 'assistant');
-                    }
-                } catch (error) {
-                    console.error('Error sending message:', error);
-                    updateConnectionStatus('disconnected');
-                    this.addMessage(`Erreur: ${error.message}. Vérifiez la connexion au backend.`, 'assistant');
-                } finally {
-                    this.setLoading(false);
-                }
-            }
-
-            async generateSalesReport() {
-                await this.sendMessage('Générer rapport de ventes', 'admin');
-            }
-
-            addMessage(content, sender) {
-                const container = document.getElementById('chatMessages');
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${sender}`;
-                
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'message-content';
-                contentDiv.textContent = content;
-                
-                messageDiv.appendChild(contentDiv);
-                container.appendChild(messageDiv);
-                
-                if (sender === 'user') {
-                    container.scrollTop = container.scrollHeight;
-                } else if (sender === 'assistant') {
-                    messageDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            }
-
-            setLoading(loading, status = null) {
-                this.isLoading = loading;
-                const loadingEl = document.getElementById('loading');
-                const loadingTextEl = document.getElementById('loadingText');
-                
-                loadingEl.classList.toggle('show', loading);
-                
-                if (loading && status) {
-                    loadingTextEl.textContent = status;
-                } else if (loading) {
-                    loadingTextEl.textContent = 'Traitement en cours...';
-                }
-            }
-        }
-
-        const chatUI = new ChatUI();
-
-        // Auto-test connection on load
-        window.addEventListener('load', () => {
-            setTimeout(testConnection, 1000);
+        // Initialize the admin dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            checkBackendStatus();
+            loadInitialData();
         });
+
+        // Tab management
+        function showTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(tab => tab.classList.remove('active'));
+
+            // Remove active class from all tabs
+            const tabs = document.querySelectorAll('.nav-tab');
+            tabs.forEach(tab => tab.classList.remove('active'));
+
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            // Load data for the selected tab
+            switch(tabName) {
+                case 'dashboard':
+                    loadDashboard();
+                    break;
+                case 'products':
+                    loadProducts();
+                    break;
+                case 'orders':
+                    loadOrders();
+                    break;
+                case 'customers':
+                    loadCustomers();
+                    break;
+                case 'inventory':
+                    loadInventory();
+                    break;
+                case 'analytics':
+                    loadAnalytics();
+                    break;
+                case 'settings':
+                    loadSettings();
+                    break;
+            }
+        }
+
+        // Modal management
+        function showModal(modalId) {
+            document.getElementById(modalId).style.display = 'block';
+        }
+
+        function hideModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // API calls
+        async function apiCall(endpoint, method = 'GET', data = null) {
+            try {
+                const options = {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                };
+
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+
+                const response = await fetch(`/api/${endpoint}`, options);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+
+        // Check backend status
+        async function checkBackendStatus() {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                document.getElementById('backend-status').textContent = data.status || 'Connecté';
+                document.getElementById('database-status').textContent = data.database || 'Connecté';
+                document.getElementById('openai-status').textContent = data.openai || 'Connecté';
+                document.getElementById('sheets-status').textContent = data.sheets || 'Connecté';
+            } catch (error) {
+                console.error('Failed to check backend status:', error);
+                document.getElementById('backend-status').textContent = 'Erreur';
+            }
+        }
+
+        // Load initial data
+        async function loadInitialData() {
+            try {
+                const [products, orders, customers, categories] = await Promise.all([
+                    apiCall('products'),
+                    apiCall('orders'),
+                    apiCall('customers'),
+                    apiCall('categories')
+                ]);
+
+                currentData = {
+                    products: products.data || [],
+                    orders: orders.data || [],
+                    customers: customers.data || [],
+                    categories: categories.data || []
+                };
+
+                updateDashboardStats();
+                populateCategoryFilters();
+            } catch (error) {
+                console.error('Failed to load initial data:', error);
+            }
+        }
+
+        // Dashboard functions
+        function loadDashboard() {
+            updateDashboardStats();
+            loadRecentActivity();
+        }
+
+        function updateDashboardStats() {
+            const totalProducts = currentData.products.length;
+            const totalOrders = currentData.orders.length;
+            const totalCustomers = currentData.customers.length;
+            const lowStockCount = currentData.products.filter(p => p.stock_quantity < 10).length;
+            const pendingOrders = currentData.orders.filter(o => o.status === 'pending').length;
+            const totalRevenue = currentData.orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+
+            document.getElementById('total-products').textContent = totalProducts;
+            document.getElementById('total-orders').textContent = totalOrders;
+            document.getElementById('total-customers').textContent = totalCustomers;
+            document.getElementById('low-stock-count').textContent = lowStockCount;
+            document.getElementById('pending-orders').textContent = pendingOrders;
+            document.getElementById('total-revenue').textContent = totalRevenue.toFixed(2) + '€';
+        }
+
+        function loadRecentActivity() {
+            const activityContainer = document.getElementById('recent-activity');
+            activityContainer.innerHTML = '<p>Activité récente chargée avec succès.</p>';
+        }
+
+        function refreshDashboard() {
+            loadInitialData();
+        }
+
+        // Products functions
+        function loadProducts() {
+            const productsList = document.getElementById('products-list');
+            
+            if (currentData.products.length === 0) {
+                productsList.innerHTML = '<p>Aucun produit trouvé.</p>';
+                return;
+            }
+
+            const productsHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>SKU</th>
+                            <th>Prix</th>
+                            <th>Stock</th>
+                            <th>Catégorie</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${currentData.products.map(product => `
+                            <tr>
+                                <td>${product.name}</td>
+                                <td>${product.sku || '-'}</td>
+                                <td>${product.price}€</td>
+                                <td>
+                                    <span class="status-badge ${product.stock_quantity < 10 ? 'status-low-stock' : 'status-active'}">
+                                        ${product.stock_quantity}
+                                    </span>
+                                </td>
+                                <td>${product.category_name || '-'}</td>
+                                <td>
+                                    <span class="status-badge ${product.is_active ? 'status-active' : 'status-cancelled'}">
+                                        ${product.is_active ? 'Actif' : 'Inactif'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-small btn-secondary" onclick="editProduct(${product.id})">✏️</button>
+                                    <button class="btn btn-small btn-danger" onclick="deleteProduct(${product.id})">🗑️</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            productsList.innerHTML = productsHTML;
+        }
+
+        function searchProducts() {
+            const searchTerm = document.getElementById('product-search').value.toLowerCase();
+            // Implementation for searching products
+            console.log('Searching products:', searchTerm);
+        }
+
+        function filterProducts() {
+            const categoryFilter = document.getElementById('category-filter').value;
+            const stockFilter = document.getElementById('stock-filter').value;
+            // Implementation for filtering products
+            console.log('Filtering products:', categoryFilter, stockFilter);
+        }
+
+        function editProduct(productId) {
+            console.log('Edit product:', productId);
+            // Implementation for editing product
+        }
+
+        function deleteProduct(productId) {
+            if (confirm('Êtes-vous sûr de vouloir supprimer ce produit ?')) {
+                console.log('Delete product:', productId);
+                // Implementation for deleting product
+            }
+        }
+
+        // Orders functions
+        function loadOrders() {
+            const ordersList = document.getElementById('orders-list');
+            
+            if (currentData.orders.length === 0) {
+                ordersList.innerHTML = '<p>Aucune commande trouvée.</p>';
+                return;
+            }
+
+            const ordersHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>N° Commande</th>
+                            <th>Client</th>
+                            <th>Plateforme</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${currentData.orders.map(order => `
+                            <tr>
+                                <td>${order.order_number}</td>
+                                <td>${order.customer_name}</td>
+                                <td>${order.platform}</td>
+                                <td>${order.total_amount}€</td>
+                                <td>
+                                    <span class="status-badge status-${order.status}">
+                                        ${order.status}
+                                    </span>
+                                </td>
+                                <td>${new Date(order.created_at).toLocaleDateString()}</td>
+                                <td>
+                                    <button class="btn btn-small btn-secondary" onclick="viewOrder(${order.id})">👁️</button>
+                                    <button class="btn btn-small btn-warning" onclick="updateOrderStatus(${order.id})">📝</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            ordersList.innerHTML = ordersHTML;
+        }
+
+        function refreshOrders() {
+            loadInitialData();
+        }
+
+        function searchOrders() {
+            const searchTerm = document.getElementById('order-search').value.toLowerCase();
+            console.log('Searching orders:', searchTerm);
+        }
+
+        function filterOrders() {
+            const statusFilter = document.getElementById('order-status-filter').value;
+            const platformFilter = document.getElementById('order-platform-filter').value;
+            console.log('Filtering orders:', statusFilter, platformFilter);
+        }
+
+        function viewOrder(orderId) {
+            console.log('View order:', orderId);
+        }
+
+        function updateOrderStatus(orderId) {
+            console.log('Update order status:', orderId);
+        }
+
+        // Customers functions
+        function loadCustomers() {
+            const customersList = document.getElementById('customers-list');
+            
+            if (currentData.customers.length === 0) {
+                customersList.innerHTML = '<p>Aucun client trouvé.</p>';
+                return;
+            }
+
+            const customersHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Plateforme</th>
+                            <th>Email</th>
+                            <th>Téléphone</th>
+                            <th>Commandes</th>
+                            <th>Dernière activité</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${currentData.customers.map(customer => `
+                            <tr>
+                                <td>${customer.name}</td>
+                                <td>${customer.platform}</td>
+                                <td>${customer.email || '-'}</td>
+                                <td>${customer.phone || '-'}</td>
+                                <td>${customer.total_orders || 0}</td>
+                                <td>${customer.last_interaction ? new Date(customer.last_interaction).toLocaleDateString() : '-'}</td>
+                                <td>
+                                    <button class="btn btn-small btn-secondary" onclick="viewCustomer(${customer.id})">👁️</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            customersList.innerHTML = customersHTML;
+        }
+
+        function refreshCustomers() {
+            loadInitialData();
+        }
+
+        function searchCustomers() {
+            const searchTerm = document.getElementById('customer-search').value.toLowerCase();
+            console.log('Searching customers:', searchTerm);
+        }
+
+        function filterCustomers() {
+            const platformFilter = document.getElementById('customer-platform-filter').value;
+            console.log('Filtering customers:', platformFilter);
+        }
+
+        function viewCustomer(customerId) {
+            console.log('View customer:', customerId);
+        }
+
+        // Inventory functions
+        function loadInventory() {
+            const inventoryList = document.getElementById('inventory-list');
+            
+            const inventoryHTML = `
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Produit</th>
+                            <th>SKU</th>
+                            <th>Stock actuel</th>
+                            <th>Stock minimum</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${currentData.products.map(product => `
+                            <tr>
+                                <td>${product.name}</td>
+                                <td>${product.sku || '-'}</td>
+                                <td>${product.stock_quantity}</td>
+                                <td>${product.min_stock || 10}</td>
+                                <td>
+                                    <span class="status-badge ${product.stock_quantity === 0 ? 'status-cancelled' : product.stock_quantity < (product.min_stock || 10) ? 'status-low-stock' : 'status-active'}">
+                                        ${product.stock_quantity === 0 ? 'Rupture' : product.stock_quantity < (product.min_stock || 10) ? 'Stock faible' : 'En stock'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-small btn-secondary" onclick="updateStock(${product.id})">📝</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+
+            inventoryList.innerHTML = inventoryHTML;
+        }
+
+        function searchInventory() {
+            const searchTerm = document.getElementById('inventory-search').value.toLowerCase();
+            console.log('Searching inventory:', searchTerm);
+        }
+
+        function filterInventory() {
+            const filter = document.getElementById('inventory-filter').value;
+            console.log('Filtering inventory:', filter);
+        }
+
+        function updateStock(productId) {
+            const newStock = prompt('Nouveau stock:');
+            if (newStock !== null) {
+                console.log('Update stock for product:', productId, 'to:', newStock);
+            }
+        }
+
+        function updateAllStock() {
+            if (confirm('Mettre à jour tous les stocks? Cette action peut prendre du temps.')) {
+                console.log('Updating all stock...');
+            }
+        }
+
+        // Analytics functions
+        function loadAnalytics() {
+            const analyticsData = document.getElementById('analytics-data');
+            analyticsData.innerHTML = '<p>Données d\'analyse chargées avec succès.</p>';
+        }
+
+        function generateReport() {
+            console.log('Generating report...');
+        }
+
+        // Settings functions
+        function loadSettings() {
+            // Load current settings
+            console.log('Loading settings...');
+        }
+
+        function saveSettings() {
+            console.log('Saving settings...');
+        }
+
+        // Utility functions
+        function populateCategoryFilters() {
+            const categorySelect = document.getElementById('category-filter');
+            const productCategorySelect = document.getElementById('product-category');
+            
+            currentData.categories.forEach(category => {
+                const option = new Option(category.name, category.id);
+                categorySelect.appendChild(option.cloneNode(true));
+                productCategorySelect.appendChild(option);
+            });
+        }
+
+        // Product form handling
+        document.getElementById('product-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                name: document.getElementById('product-name').value,
+                sku: document.getElementById('product-sku').value,
+                description: document.getElementById('product-description').value,
+                price: parseFloat(document.getElementById('product-price').value),
+                category_id: document.getElementById('product-category').value,
+                stock_quantity: parseInt(document.getElementById('product-stock').value),
+                unit: document.getElementById('product-unit').value,
+                image_url: document.getElementById('product-image').value,
+                is_active: document.getElementById('product-active').value === 'true'
+            };
+
+            console.log('Saving product:', formData);
+            hideModal('product-modal');
+        });
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        };
     </script>
 </body>
 </html> 

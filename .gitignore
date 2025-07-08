@@ -10,6 +10,8 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.dev.vars
+.dev.vars.example
 
 # Cloudflare Workers
 .wrangler/
@@ -115,3 +117,5 @@ update_*.js
 # Cloudflare specific
 wrangler.toml.example 
 .vercel
+sales-agent-464920-3171da24afc5.json
+.dev.vars

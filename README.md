@@ -1,6 +1,6 @@
 # X Company Bio Products - Express.js Backend
 
-A comprehensive Express.js backend for managing bio products sales, customer relationships, and AI-powered chat support.
+A comprehensive Express.js backend for managing lingerie products sales, customer relationships, and AI-powered chat support.
 
 ## 🚀 Features
 
@@ -8,6 +8,7 @@ A comprehensive Express.js backend for managing bio products sales, customer rel
 - **Order Processing**: Order creation, tracking, and status management
 - **Customer Management**: Customer profiles and order history
 - **AI Chat Support**: OpenAI-powered customer assistance
+- **🤖 Messenger Integration**: Facebook Messenger webhook support for automated customer service
 - **Analytics Dashboard**: Sales, product, and customer analytics
 - **Google Sheets Integration**: Automatic order backup and sync
 - **Admin Panel**: System monitoring and maintenance tools
@@ -43,6 +44,11 @@ A comprehensive Express.js backend for managing bio products sales, customer rel
    GOOGLE_SHEETS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour_private_key_here\n-----END PRIVATE KEY-----\n"
    GOOGLE_SHEETS_CLIENT_EMAIL=your-service-account@project.iam.gserviceaccount.com
    GOOGLE_SHEETS_SPREADSHEET_ID=your_spreadsheet_id_here
+
+   # Facebook Messenger Integration (optional)
+   MESSENGER_VERIFY_TOKEN=your_webhook_verify_token
+   MESSENGER_ACCESS_TOKEN=your_page_access_token
+   MESSENGER_APP_SECRET=your_app_secret
    ```
 
 4. **Start the server**
@@ -97,6 +103,12 @@ A comprehensive Express.js backend for managing bio products sales, customer rel
 - `PUT /api/chat/:threadId/status` - Update chat status
 - `GET /api/chat` - List all chats (admin)
 
+### Webhooks (Messenger Integration)
+- `GET /webhook/messenger` - Webhook verification
+- `POST /webhook/messenger` - Receive messages
+- `GET /webhook/debug/sessions` - Debug active sessions
+- `GET /webhook/debug/config` - Debug webhook configuration
+
 ### Analytics
 - `GET /api/analytics/dashboard` - Dashboard overview
 - `GET /api/analytics/sales` - Sales analytics
@@ -149,6 +161,26 @@ The system includes an intelligent chat assistant powered by OpenAI:
 - **Product information**: Detailed product explanations
 - **Fallback responses**: Works even without OpenAI configuration
 
+## 📱 Messenger Integration
+
+Connect your sales agent directly to Facebook Messenger for automated customer service:
+
+- **Webhook Verification**: Secure Facebook webhook integration
+- **Message Processing**: Handle text messages, attachments, and postbacks
+- **Session Management**: Maintain conversation context across messages
+- **Typing Indicators**: Show when the bot is processing responses
+- **Quick Replies**: Provide customers with quick action buttons
+- **User Profiles**: Fetch and use customer profile information
+- **Auto-responses**: Intelligent responses powered by OpenAI
+- **Security**: Signature verification and request validation
+
+### Setup Instructions
+See [MESSENGER_SETUP.md](./MESSENGER_SETUP.md) for complete setup instructions including:
+- Facebook Developer App configuration
+- Environment variable setup
+- Webhook URL configuration
+- Testing and debugging
+
 ## 📊 Google Sheets Integration
 
 Automatic synchronization with Google Sheets for:
@@ -189,10 +221,17 @@ backend/
 │   ├── customers.js        # Customer endpoints
 │   ├── chat.js             # Chat endpoints
 │   ├── analytics.js        # Analytics endpoints
-│   └── admin.js            # Admin endpoints
+│   ├── admin.js            # Admin endpoints
+│   ├── storage.js          # Storage endpoints
+│   ├── webhook.js          # Webhook endpoints (Messenger)
+│   └── whatsapp.js         # whatsapp endpoints (whatsapp)
 └── services/
     ├── openai.js           # OpenAI integration
+    ├── openai-cache.js
+    ├── supabase.js
+    ├── supabase-storage.js
     └── googleSheets.js     # Google Sheets integration
+
 ```
 
 ### Database
@@ -264,6 +303,14 @@ curl -X POST http://localhost:3000/api/chat/start \
 curl http://localhost:3000/api/analytics/dashboard
 ```
 
+## 📖 Documentation
+
+For detailed guides and setup instructions, visit the [Documentation Directory](./docs/):
+
+- **[Deployment Guides](./docs/deployment/)** - Cloudflare Workers, Vercel, and general deployment
+- **[Integration Guides](./docs/integrations/)** - Messenger, WhatsApp, Supabase, and other integrations  
+- **[Technical Guides](./docs/guides/)** - Implementation details and quick start guides
+
 ## 🤝 Contributing
 
 1. Fork the repository
@@ -279,6 +326,7 @@ MIT License - see LICENSE file for details
 ## 🆘 Support
 
 For support and questions:
+
 - Check the API documentation at `/api`
 - Review the health check at `/health`
 - Monitor system status at `/api/admin/health`
@@ -286,4 +334,4 @@ For support and questions:
 ---
 
 **X Company Bio Products Backend v2.0.0**  
-Built with Express.js, OpenAI, and Google Sheets integration 
+Built with Express.js, OpenAI, and Google Sheets integration
