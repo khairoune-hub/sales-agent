@@ -180,9 +180,9 @@ async function handleWhatsAppMessage(message, metadata) {
         
         // Handle different message types
         if (message.type === 'text') {
-            await processWhatsAppTextMessage(senderId, message.text.body, session, phoneNumberId);
+            await processWhatsAppTextMessage(senderId, message.text.body, session, phoneNumberId, message.id);
         } else if (message.type === 'image' || message.type === 'document' || message.type === 'audio' || message.type === 'video') {
-            await processWhatsAppMediaMessage(senderId, message, session, phoneNumberId);
+            await processWhatsAppMediaMessage(senderId, message, session, phoneNumberId, message.id);
         } else if (message.type === 'interactive') {
             await processWhatsAppInteractiveMessage(senderId, message.interactive, session, phoneNumberId);
         } else {
@@ -249,16 +249,16 @@ async function createWhatsAppSession(senderId) {
 }
 
 // Process WhatsApp text messages
-async function processWhatsAppTextMessage(senderId, text, session, phoneNumberId) {
+async function processWhatsAppTextMessage(senderId, text, session, phoneNumberId, messageId = null) {
     try {
-        console.log(`🔄 Processing WhatsApp text message: "${text}"`);
+        console.log(`🔄 Processing WhatsApp text message: "${text}" (ID: ${messageId})`);
         
         // Update session activity
         session.lastActivity = new Date();
         session.messageCount++;
         
-        // Send typing indicator
-        await sendWhatsAppTypingIndicator(senderId, true, phoneNumberId);
+        // Send typing indicator with the message ID for proper read status and typing display
+        await sendWhatsAppTypingIndicator(senderId, true, phoneNumberId, messageId);
         
         // Process with OpenAI
         const response = await openAIService.sendMessage(
@@ -272,8 +272,8 @@ async function processWhatsAppTextMessage(senderId, text, session, phoneNumberId
             }
         );
         
-        // Send typing indicator off
-        await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId);
+        // Typing indicator will auto-dismiss when we send the response message
+        await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId, messageId);
         
         // Log the interaction
         try {
@@ -339,23 +339,23 @@ async function processWhatsAppTextMessage(senderId, text, session, phoneNumberId
 }
 
 // Process WhatsApp media messages
-async function processWhatsAppMediaMessage(senderId, message, session, phoneNumberId) {
+async function processWhatsAppMediaMessage(senderId, message, session, phoneNumberId, messageId = null) {
     try {
-        console.log(`📎 Processing WhatsApp media message: ${message.type}`);
+        console.log(`📎 Processing WhatsApp media message: ${message.type} (ID: ${messageId})`);
         
         // Update session activity
         session.lastActivity = new Date();
         session.messageCount++;
         
         if (message.type === 'image') {
-            await processWhatsAppImageMessage(senderId, message.image, session, phoneNumberId);
+            await processWhatsAppImageMessage(senderId, message.image, session, phoneNumberId, 'image', messageId);
         } else if (message.type === 'document') {
             // Check if it's an image document
             const fileName = message.document.filename || 'document';
             const fileExtension = fileName.split('.').pop().toLowerCase();
             
             if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension)) {
-                await processWhatsAppImageMessage(senderId, message.document, session, phoneNumberId, 'document');
+                await processWhatsAppImageMessage(senderId, message.document, session, phoneNumberId, 'document', messageId);
             } else {
                 await sendWhatsAppTextMessage(
                     senderId, 
@@ -383,14 +383,14 @@ async function processWhatsAppMediaMessage(senderId, message, session, phoneNumb
 }
 
 // Process WhatsApp image messages with vision AI
-async function processWhatsAppImageMessage(senderId, imageData, session, phoneNumberId, mediaType = 'image') {
+async function processWhatsAppImageMessage(senderId, imageData, session, phoneNumberId, mediaType = 'image', messageId = null) {
     try {
-        console.log(`\n🖼️ Processing WhatsApp ${mediaType} message`);
+        console.log(`\n🖼️ Processing WhatsApp ${mediaType} message (ID: ${messageId})`);
         console.log(`- Image ID: ${imageData.id}`);
         console.log(`- MIME type: ${imageData.mime_type}`);
         
-        // Send typing indicator (WhatsApp doesn't have typing indicators, so we'll mark as read)
-        await sendWhatsAppTypingIndicator(senderId, true, phoneNumberId);
+        // Send typing indicator with proper message ID for read status and typing display
+        await sendWhatsAppTypingIndicator(senderId, true, phoneNumberId, messageId);
         
         // Send initial acknowledgment
         await sendWhatsAppTextMessage(senderId, 'J\'analyse votre image... 🔍', phoneNumberId);
@@ -437,8 +437,8 @@ async function processWhatsAppImageMessage(senderId, imageData, session, phoneNu
                 }
             );
             
-            // Turn off typing indicator
-            await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId);
+            // Typing indicator will auto-dismiss when we send the response message
+            await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId, messageId);
             
             // Send the AI response
             await sendWhatsAppTextMessage(senderId, response, phoneNumberId);
@@ -449,7 +449,7 @@ async function processWhatsAppImageMessage(senderId, imageData, session, phoneNu
             console.error('❌ WhatsApp vision processing failed:', visionError);
             
             // Turn off typing indicator
-            await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId);
+            await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId, messageId);
             
             // Send fallback message based on error type
             let fallbackMessage;
@@ -468,7 +468,7 @@ async function processWhatsAppImageMessage(senderId, imageData, session, phoneNu
         
     } catch (error) {
         console.error('❌ Error processing WhatsApp image:', error);
-        await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId);
+        await sendWhatsAppTypingIndicator(senderId, false, phoneNumberId, messageId);
         await sendWhatsAppTextMessage(senderId, 'Une erreur s\'est produite lors de l\'analyse de l\'image. Veuillez réessayer.', phoneNumberId);
     }
 }
@@ -641,20 +641,54 @@ async function sendWhatsAppImageMessage(to, imageUrl, caption, phoneNumberId) {
 }
 
 // Send WhatsApp typing indicator
-async function sendWhatsAppTypingIndicator(to, isTyping, phoneNumberId) {
+async function sendWhatsAppTypingIndicator(to, isTyping, phoneNumberId, messageId = null) {
     try {
         const config = getWhatsAppConfig();
         if (!config.WHATSAPP_ACCESS_TOKEN || !phoneNumberId) {
+            console.log('❌ WhatsApp access token or phone number ID not configured for typing indicator');
             return false;
         }
         
-        if (isTyping) {
-            // WhatsApp doesn't have typing indicators like Messenger
-            // We can send a "seen" status instead
-            console.log(`👁️ Marking WhatsApp message as read for ${to}`);
+        if (isTyping && messageId) {
+            console.log(`⌨️ Sending WhatsApp typing indicator for ${to} (message: ${messageId})`);
+            
+            // Use the official WhatsApp typing indicator API
+            const typingData = {
+                messaging_product: 'whatsapp',
+                status: 'read',
+                message_id: messageId,
+                typing_indicator: {
+                    type: 'text'
+                }
+            };
+            
+            const response = await fetch(`https://graph.facebook.com/v21.0/${phoneNumberId}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${config.WHATSAPP_ACCESS_TOKEN}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(typingData)
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('✅ WhatsApp typing indicator sent successfully:', result);
+                return true;
+            } else {
+                const error = await response.json();
+                console.error('❌ Failed to send WhatsApp typing indicator:', error);
+                return false;
+            }
+        } else if (isTyping && !messageId) {
+            console.log('⚠️ Cannot send typing indicator: no message ID provided');
+            return false;
+        } else {
+            // When stopping typing, no action needed as typing indicator auto-dismisses
+            console.log(`⏹️ Typing indicator will auto-dismiss for ${to}`);
+            return true;
         }
         
-        return true;
     } catch (error) {
         console.error('❌ Error sending WhatsApp typing indicator:', error);
         return false;

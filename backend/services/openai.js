@@ -1,62 +1,225 @@
-import OpenAI from 'openai';
 import { dbUtils } from '../models/database.js';
-import { productService, orderService, customerService } from './supabase.js';
+import { productService, orderService } from './supabase.js';
 import { getCachedProducts, searchCachedProducts, getCachedProductById, searchCachedProductsWithVariants } from './openai-cache.js';
 import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
-import path from 'path';
 import { SYSTEM_CONTEXT } from '../../src/SYSTEM_CONTEXT.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// OpenAI client will be initialized lazily
+// Enhanced connection pool and caching for multiple concurrent users
 let openai = null;
 let isInitialized = false;
+let initializationPromise = null;
 
-// Circuit breaker pattern for OpenAI API calls
-const circuitBreaker = {
-    failures: 0,
-    lastFailureTime: 0,
-    state: 'CLOSED', // CLOSED, OPEN, HALF_OPEN
-    threshold: 5, // failures before opening
-    timeout: 60000, // 1 minute timeout when open
+// Connection pool for handling multiple concurrent requests
+const connectionPool = {
+    activeConnections: new Set(),
+    maxConnections: 50, // Adjust based on your OpenAI tier
+    queuedRequests: [],
     
-    async call(fn, ...args) {
-        if (this.state === 'OPEN') {
-            if (Date.now() - this.lastFailureTime > this.timeout) {
-                this.state = 'HALF_OPEN';
-                console.log('🔄 Circuit breaker moving to HALF_OPEN state');
-            } else {
-                throw new Error('Circuit breaker is OPEN - OpenAI API temporarily unavailable');
+    async acquireConnection() {
+        if (this.activeConnections.size < this.maxConnections) {
+            const connectionId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            this.activeConnections.add(connectionId);
+            return connectionId;
+        }
+        
+        // Queue the request if pool is full
+        return new Promise((resolve) => {
+            this.queuedRequests.push(resolve);
+        });
+    },
+    
+    releaseConnection(connectionId) {
+        this.activeConnections.delete(connectionId);
+        
+        // Process queued requests
+        if (this.queuedRequests.length > 0) {
+            const nextResolve = this.queuedRequests.shift();
+            const newConnectionId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            this.activeConnections.add(newConnectionId);
+            nextResolve(newConnectionId);
+        }
+    },
+    
+    getStats() {
+        return {
+            active: this.activeConnections.size,
+            queued: this.queuedRequests.length,
+            maxConnections: this.maxConnections
+        };
+    }
+};
+
+// Enhanced response caching for better performance
+const responseCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 1000;
+
+const cacheManager = {
+    set(key, value) {
+        // Implement LRU eviction if cache is full
+        if (responseCache.size >= MAX_CACHE_SIZE) {
+            const firstKey = responseCache.keys().next().value;
+            responseCache.delete(firstKey);
+        }
+        
+        responseCache.set(key, {
+            value,
+            timestamp: Date.now(),
+            hits: 0
+        });
+    },
+    
+    get(key) {
+        const cached = responseCache.get(key);
+        if (!cached) return null;
+        
+        // Check if cache entry is still valid
+        if (Date.now() - cached.timestamp > CACHE_TTL) {
+            responseCache.delete(key);
+            return null;
+        }
+        
+        cached.hits++;
+        return cached.value;
+    },
+    
+    clear() {
+        responseCache.clear();
+    },
+    
+    getStats() {
+        const now = Date.now();
+        let validEntries = 0;
+        let totalHits = 0;
+        
+        for (const [key, entry] of responseCache.entries()) {
+            if (now - entry.timestamp <= CACHE_TTL) {
+                validEntries++;
+                totalHits += entry.hits;
             }
         }
         
+        return {
+            totalEntries: responseCache.size,
+            validEntries,
+            totalHits,
+            hitRate: validEntries > 0 ? (totalHits / validEntries).toFixed(2) : 0
+        };
+    }
+};
+
+// Enhanced Circuit breaker pattern for production scaling
+const circuitBreaker = {
+    failures: 0,
+    lastFailureTime: 0,
+    successCount: 0,
+    state: 'CLOSED', // CLOSED, OPEN, HALF_OPEN
+    threshold: 3, // Reduced threshold for faster recovery
+    timeout: 30000, // 30 seconds timeout when open (reduced for better UX)
+    halfOpenMaxRequests: 2, // Max requests in half-open state
+    metrics: {
+        totalRequests: 0,
+        totalFailures: 0,
+        totalSuccesses: 0,
+        lastReset: Date.now()
+    },
+    
+    async call(fn, ...args) {
+        this.metrics.totalRequests++;
+        
+        if (this.state === 'OPEN') {
+            if (Date.now() - this.lastFailureTime > this.timeout) {
+                this.state = 'HALF_OPEN';
+                this.successCount = 0;
+                console.log('🔄 Circuit breaker moving to HALF_OPEN state');
+            } else {
+                const remainingTime = Math.ceil((this.timeout - (Date.now() - this.lastFailureTime)) / 1000);
+                throw new Error(`Circuit breaker is OPEN - Service temporarily unavailable. Retry in ${remainingTime}s`);
+            }
+        }
+        
+        if (this.state === 'HALF_OPEN' && this.successCount >= this.halfOpenMaxRequests) {
+            throw new Error('Circuit breaker HALF_OPEN - Maximum test requests exceeded');
+        }
+        
         try {
+            const startTime = Date.now();
             const result = await fn(...args);
+            const duration = Date.now() - startTime;
             
-            // Success - reset circuit breaker
+            // Success handling
+            this.metrics.totalSuccesses++;
+            
             if (this.state === 'HALF_OPEN') {
-                this.state = 'CLOSED';
-                this.failures = 0;
-                console.log('✅ Circuit breaker reset to CLOSED state');
+                this.successCount++;
+                if (this.successCount >= this.halfOpenMaxRequests) {
+                    this.state = 'CLOSED';
+                    this.failures = 0;
+                    console.log('✅ Circuit breaker reset to CLOSED state after successful test');
+                }
+            } else if (this.state === 'CLOSED') {
+                // Reset failure count on success
+                this.failures = Math.max(0, this.failures - 1);
+            }
+            
+            // Log performance metrics
+            if (duration > 10000) { // Warn on slow requests
+                console.warn(`⚠️ Slow OpenAI request: ${duration}ms`);
             }
             
             return result;
         } catch (error) {
             this.failures++;
             this.lastFailureTime = Date.now();
+            this.metrics.totalFailures++;
+            
+            // Enhanced error classification
+            const isRateLimitError = error.status === 429 || error.message?.includes('rate limit');
+            const isServerError = error.status >= 500;
+            const isTimeoutError = error.message?.includes('timeout') || error.code === 'ECONNABORTED';
+            
+            // Different thresholds for different error types
+            let effectiveThreshold = this.threshold;
+            if (isRateLimitError) {
+                effectiveThreshold = 1; // Open immediately on rate limits
+            } else if (isServerError || isTimeoutError) {
+                effectiveThreshold = 2; // Open faster on server issues
+            }
             
             // Check if we should open the circuit
-            if (this.failures >= this.threshold) {
+            if (this.failures >= effectiveThreshold && this.state !== 'OPEN') {
                 this.state = 'OPEN';
-                console.error(`💥 Circuit breaker OPENED after ${this.failures} failures`);
+                console.error(`💥 Circuit breaker OPENED after ${this.failures} failures (${error.status || error.code || 'unknown error'})`);
             }
             
             throw error;
         }
+    },
+    
+    // Get circuit breaker status
+    getStatus() {
+        return {
+            state: this.state,
+            failures: this.failures,
+            successCount: this.successCount,
+            metrics: this.metrics,
+            healthScore: this.metrics.totalRequests > 0 ? 
+                (this.metrics.totalSuccesses / this.metrics.totalRequests * 100).toFixed(2) + '%' : 'N/A'
+        };
+    },
+    
+    // Reset circuit breaker (for admin use)
+    reset() {
+        this.state = 'CLOSED';
+        this.failures = 0;
+        this.successCount = 0;
+        this.lastFailureTime = 0;
+        console.log('🔄 Circuit breaker manually reset');
     }
 };
 
@@ -80,40 +243,62 @@ const getAssistantId = () => {
     }
 };
 
-// Initialize OpenAI client (called lazily when first needed)
-const initializeOpenAI = () => {
-    if (isInitialized) {
+// Initialize OpenAI client with enhanced error handling and connection pooling
+const initializeOpenAI = async () => {
+    // Prevent multiple concurrent initializations
+    if (initializationPromise) {
+        return await initializationPromise;
+    }
+    
+    if (isInitialized && openai) {
         return openai;
     }
 
-    console.log('\n🔧 OpenAI Service Initialization:');
-    console.log('================================');
-    console.log(`- OPENAI_API_KEY exists: ${!!process.env.OPENAI_API_KEY}`);
-    
-    if (process.env.OPENAI_API_KEY) {
+    initializationPromise = (async () => {
+        console.log('\n🔧 OpenAI Service Initialization:');
+        console.log('================================');
+        console.log(`- OPENAI_API_KEY exists: ${!!process.env.OPENAI_API_KEY}`);
+        
+        if (!process.env.OPENAI_API_KEY) {
+            console.error('❌ OPENAI_API_KEY is not set in environment variables');
+            console.log('Available env vars:', Object.keys(process.env).filter(key => key.includes('OPENAI')));
+            isInitialized = true; // Mark as initialized even if failed to prevent retry loops
+            return null;
+        }
+        
         console.log(`- Key length: ${process.env.OPENAI_API_KEY.length}`);
         console.log(`- Key starts with: ${process.env.OPENAI_API_KEY.substring(0, 10)}...`);
         
         try {
+            const { OpenAI } = await import('openai');
+            
             openai = new OpenAI({
                 apiKey: process.env.OPENAI_API_KEY,
+                timeout: 30000, // 30 second timeout
+                maxRetries: 2, // Built-in retry mechanism
             });
+            
+            // Test the connection with a simple request
+            console.log('🧪 Testing OpenAI connection...');
+            const models = await openai.models.list();
+            console.log(`✅ OpenAI connection verified - ${models.data.length} models available`);
+            
             console.log('✅ OpenAI client initialized successfully');
         } catch (error) {
             console.error('❌ Failed to initialize OpenAI client:', error.message);
             openai = null;
         }
-    } else {
-        console.error('❌ OPENAI_API_KEY is not set in environment variables');
-        console.log('Available env vars:', Object.keys(process.env).filter(key => key.includes('OPENAI')));
-        openai = null;
-    }
+        
+        console.log(`- OPENAI_MODEL: ${process.env.OPENAI_MODEL || 'gpt-4o'}`);
+        console.log('================================\n');
+        
+        isInitialized = true;
+        return openai;
+    })();
     
-    console.log(`- OPENAI_MODEL: ${process.env.OPENAI_MODEL || 'gpt-4-turbo-preview'}`);
-    console.log('================================\n');
-    
-    isInitialized = true;
-    return openai;
+    const result = await initializationPromise;
+    initializationPromise = null; // Reset for future reinitializations if needed
+    return result;
 };
 
 // Supported file types and their configurations
@@ -336,7 +521,7 @@ export const openAIService = {
     processImageMessage: async (threadId, textMessage, imageBuffer, context = {}) => {
         console.log(`\n🖼️ Processing image message with vision model`);
         
-        const client = initializeOpenAI();
+        const client = await initializeOpenAI();
         if (!client) {
             throw new Error('OpenAI client not initialized');
         }
@@ -447,7 +632,7 @@ export const openAIService = {
         console.log('\n🔄 Creating OpenAI thread...');
         
         // Initialize OpenAI client if not already done
-        const client = initializeOpenAI();
+        const client = await initializeOpenAI();
         
         console.log(`- OpenAI client exists: ${!!client}`);
         console.log(`- API key exists: ${!!process.env.OPENAI_API_KEY}`);
@@ -470,191 +655,261 @@ export const openAIService = {
         }
     },
 
-    // Send a message and get AI response
+    // Enhanced message sending with connection pooling and caching
     sendMessage: async (threadId, message, context = {}) => {
-        // Wrap with circuit breaker
-        return await circuitBreaker.call(async () => {
-            console.log(`\n💬 Sending message to thread ${threadId}`);
-            console.log(`- Message: ${message.substring(0, 50)}...`);
-            console.log(`- Context: language=${context.language}, platform=${context.platform}`);
-            console.log(`- Circuit breaker state: ${circuitBreaker.state}`);
+        const connectionId = await connectionPool.acquireConnection();
+        
+        try {
+            // Create cache key for identical requests
+            const cacheKey = `${threadId}:${message}:${JSON.stringify(context)}`;
+            const cachedResponse = cacheManager.get(cacheKey);
             
-            // Initialize OpenAI client if not already done
-            const client = initializeOpenAI();
-            console.log(`- OpenAI client exists: ${!!client}`);
-            
-            if (!client) {
-                console.warn('⚠️ OpenAI not configured, returning fallback response');
-                // Fallback response when OpenAI is not configured
-                return `Merci pour votre message. Notre équipe vous répondra bientôt. En attendant, vous pouvez consulter nos produits biologiques sur notre site.`;
+            if (cachedResponse) {
+                console.log(`🚀 Cache hit for message: ${message.substring(0, 50)}...`);
+                return cachedResponse;
             }
-
-            // Track timing for performance monitoring
-            const startTime = Date.now();
-            let step = 'initialization';
-
-            try {
-                const { language = 'fr', customerName, userType = 'customer' } = context;
+            
+            // Wrap with circuit breaker and enhanced error handling
+            const response = await circuitBreaker.call(async () => {
+                console.log(`\n💬 Processing message (Connection: ${connectionId})`);
+                console.log(`- Thread: ${threadId}`);
+                console.log(`- Message: ${message.substring(0, 100)}...`);
+                console.log(`- Context: language=${context.language}, platform=${context.platform}`);
+                console.log(`- Circuit breaker: ${circuitBreaker.state}`);
+                console.log(`- Pool stats:`, connectionPool.getStats());
                 
-                // Step 1: Enhanced cleanup with better error handling
-                step = 'cleanup';
-                console.log('🧹 Performing comprehensive cleanup...');
+                // Initialize OpenAI client if not already done
+                const client = await initializeOpenAI();
+                console.log(`- OpenAI client available: ${!!client}`);
                 
+                if (!client) {
+                    console.warn('⚠️ OpenAI not configured, returning fallback response');
+                    // Enhanced fallback with language support
+                    const fallbackResponses = {
+                        fr: `Merci pour votre message "${message.substring(0, 50)}...". Notre équipe vous répondra bientôt. En attendant, vous pouvez consulter nos produits de lingerie sur notre site ou nous contacter directement.`,
+                        ar: `شكراً لرسالتك "${message.substring(0, 50)}...". سيرد عليك فريقنا قريباً. في هذه الأثناء، يمكنك تصفح منتجات الملابس الداخلية على موقعنا أو التواصل معنا مباشرة.`
+                    };
+                    return fallbackResponses[context.language] || fallbackResponses.fr;
+                }
+
+                // Track timing for performance monitoring
+                const startTime = Date.now();
+                let step = 'initialization';
+
                 try {
-                    await openAIService.cleanupActiveRuns(client, threadId);
-                } catch (cleanupError) {
-                    console.warn('⚠️ Initial cleanup failed, trying force cleanup:', cleanupError.message);
-                    // Try force cleanup if regular cleanup fails
+                    const { language = 'fr', customerName, userType = 'customer' } = context;
+                    
+                    // Step 1: Enhanced cleanup with timeout
+                    step = 'cleanup';
+                    console.log('🧹 Performing thread cleanup...');
+                    
+                    const cleanupTimeout = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Cleanup timeout')), 15000)
+                    );
+                    
                     try {
-                        await openAIService.forceCleanupThread(client, threadId);
-                    } catch (forceCleanupError) {
-                        console.error('❌ Force cleanup also failed:', forceCleanupError.message);
-                        // Continue anyway - the message retry logic will handle active runs
+                        await Promise.race([
+                            openAIService.cleanupActiveRuns(client, threadId),
+                            cleanupTimeout
+                        ]);
+                    } catch (cleanupError) {
+                        console.warn('⚠️ Cleanup timeout or failed, continuing anyway:', cleanupError.message);
                     }
-                }
-                
-                // Step 2: Add user message to thread with enhanced retry logic
-                step = 'adding_message';
-                console.log('📝 Adding message to thread with enhanced retry...');
-                await openAIService.addMessageWithRetry(client, threadId, message);
-                
-                // Step 3: Create and execute run with timeout protection
-                step = 'executing_run';
-                console.log('🤖 Creating and executing run...');
-                const response = await openAIService.executeRun(client, threadId, context);
-                
-                const duration = Date.now() - startTime;
-                console.log(`✅ Message processed successfully in ${duration}ms`);
-                
-                return response;
+                    
+                    // Step 2: Add user message with enhanced retry
+                    step = 'adding_message';
+                    console.log('📝 Adding message to thread...');
+                    await openAIService.addMessageWithRetry(client, threadId, message);
+                    
+                    // Step 3: Execute run with enhanced monitoring
+                    step = 'executing_run';
+                    console.log('🤖 Creating and executing run...');
+                    const response = await openAIService.executeRun(client, threadId, context);
+                    
+                    const duration = Date.now() - startTime;
+                    console.log(`✅ Message processed successfully in ${duration}ms`);
+                    
+                    // Cache successful responses (but not for personalized messages)
+                    if (!customerName && !context.platform) {
+                        cacheManager.set(cacheKey, response);
+                    }
+                    
+                    return response;
 
-            } catch (error) {
-                const duration = Date.now() - startTime;
-                console.error(`❌ OpenAI message error at step '${step}' after ${duration}ms:`, error);
-                
-                // Enhanced error logging for debugging
-                if (error.message) {
-                    console.error(`Error message: ${error.message}`);
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    console.error(`❌ Error at step '${step}' after ${duration}ms:`, {
+                        message: error.message,
+                        status: error.status,
+                        code: error.code,
+                        threadId,
+                        step
+                    });
+                    
+                    // Enhanced error classification for better user experience
+                    const isRecoverableError = (
+                        error.message?.includes('active run') ||
+                        error.message?.includes('rate limit') ||
+                        error.status === 429 ||
+                        error.status >= 500 ||
+                        error.message?.includes('timeout')
+                    );
+                    
+                    const isQuotaError = error.message?.includes('quota') || error.status === 402;
+                    const isModelError = error.message?.includes('model') && error.status === 400;
+                    
+                    // Provide specific error responses
+                    if (isQuotaError) {
+                        const quotaMsg = context.language === 'ar' 
+                            ? 'نعتذر، وصلنا للحد الأقصى من الاستخدام اليوم. سيتم استئناف الخدمة قريباً.'
+                            : 'Désolé, nous avons atteint la limite d\'utilisation quotidienne. Le service reprendra bientôt.';
+                        throw new Error(quotaMsg);
+                    }
+                    
+                    if (isModelError) {
+                        console.error('🔧 Model configuration error - may need admin attention');
+                    }
+                    
+                    // Re-throw for circuit breaker to handle
+                    throw error;
                 }
-                if (error.status) {
-                    console.error(`HTTP status: ${error.status}`);
-                }
-                if (error.code) {
-                    console.error(`Error code: ${error.code}`);
-                }
-                
-                // Determine if this is a recoverable error for future attempts
-                const isRecoverableError = (
-                    error.message?.includes('active run') ||
-                    error.message?.includes('rate limit') ||
-                    error.status === 429 ||
-                    error.status >= 500
-                );
-                
-                if (isRecoverableError) {
-                    console.warn(`⚠️ Recoverable error detected - user should retry in a moment`);
-                } else {
-                    console.error(`💀 Non-recoverable error - may need thread reset`);
-                }
-                
-                // Enhanced fallback responses with more helpful information
-                const fallbackResponses = {
-                    fr: isRecoverableError 
-                        ? `Je rencontre une difficulté technique temporaire. Veuillez réessayer dans quelques instants. Si le problème persiste, notre équipe vous aidera avec vos questions sur nos produits biologiques.`
-                        : `Je suis désolé, je rencontre des difficultés techniques. Notre équipe vous contactera bientôt pour vous aider avec vos questions sur nos produits biologiques.`,
-                    ar: isRecoverableError
-                        ? `أواجه صعوبة تقنية مؤقتة. يرجى المحاولة مرة أخرى خلال لحظات. إذا استمرت المشكلة، سيساعدك فريقنا بأسئلتك حول منتجاتنا العضوية.`
-                        : `أعتذر، أواجه صعوبات تقنية. سيتواصل معك فريقنا قريباً لمساعدتك بأسئلتك حول منتجاتنا العضوية.`
-                };
-                
-                // Re-throw for circuit breaker to handle
-                throw error;
-            }
-        }).catch(error => {
-            // Circuit breaker caught the error, return appropriate fallback
+            });
+            
+            return response;
+            
+        } catch (error) {
+            // Circuit breaker caught the error, provide appropriate fallback
             if (error.message?.includes('Circuit breaker is OPEN')) {
-                console.warn('⚠️ Circuit breaker is open, returning fallback response');
-                return context.language === 'ar' 
-                    ? `النظام مُحمّل حالياً. يرجى المحاولة مرة أخرى خلال دقيقة.`
-                    : `Le système est temporairement surchargé. Veuillez réessayer dans une minute.`;
+                console.warn('⚠️ Circuit breaker is open, returning service unavailable message');
+                const unavailableMsg = context.language === 'ar' 
+                    ? `الخدمة محملة حالياً. يرجى المحاولة مرة أخرى خلال دقيقة. للطوارئ، تواصل معنا مباشرة.`
+                    : `Le service est temporairement surchargé. Veuillez réessayer dans une minute. Pour les urgences, contactez-nous directement.`;
+                return unavailableMsg;
             }
             
-            // Regular error fallback
-            const fallbackResponses = {
-                fr: `Je suis désolé, je rencontre des difficultés techniques. Notre équipe vous contactera bientôt pour vous aider avec vos questions sur nos produits biologiques.`,
-                ar: `أعتذر، أواجه صعوبات تقنية. سيتواصل معك فريقنا قريباً لمساعدتك بأسئلتك حول منتجاتنا العضوية.`
+            // Provide contextual error messages
+            const errorResponses = {
+                fr: error.message?.includes('quota') 
+                    ? 'Notre service chat est temporairement indisponible. Notre équipe vous contactera pour vos questions sur nos produits de lingerie.'
+                    : `Nous rencontrons une difficulté technique temporaire. Notre équipe vous aidera avec vos questions sur nos produits. Erreur: ${error.message?.substring(0, 100) || 'Service temporairement indisponible'}`,
+                ar: error.message?.includes('quota')
+                    ? 'خدمة الدردشة غير متاحة مؤقتاً. سيتواصل معك فريقنا للإجابة على أسئلتك حول منتجات الملابس الداخلية.'
+                    : `نواجه صعوبة تقنية مؤقتة. سيساعدك فريقنا بأسئلتك حول منتجاتنا. خطأ: ${error.message?.substring(0, 100) || 'الخدمة غير متاحة مؤقتاً'}`
             };
             
-            return fallbackResponses[context.language] || fallbackResponses.fr;
-        });
+            return errorResponses[context.language] || errorResponses.fr;
+            
+        } finally {
+            connectionPool.releaseConnection(connectionId);
+        }
     },
 
-    // Helper method to clean up active runs
+    // Enhanced cleanup with better concurrency handling
     cleanupActiveRuns: async (client, threadId) => {
+        const cleanupId = Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+        console.log(`🧹 Starting cleanup ${cleanupId} for thread ${threadId}`);
+        
         try {
-            const existingRuns = await client.beta.threads.runs.list(threadId);
+            // First, get current runs with timeout
+            const listRunsTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('List runs timeout')), 10000)
+            );
+            
+            const existingRuns = await Promise.race([
+                client.beta.threads.runs.list(threadId, { limit: 20 }),
+                listRunsTimeout
+            ]);
+            
             const activeRuns = existingRuns.data.filter(run => 
                 ['running', 'queued', 'in_progress', 'requires_action'].includes(run.status)
             );
             
             if (activeRuns.length === 0) {
-                console.log('✅ No active runs found');
+                console.log(`✅ Cleanup ${cleanupId}: No active runs found`);
                 return;
             }
             
-            console.log(`🧹 Found ${activeRuns.length} active run(s), cancelling them...`);
+            console.log(`🧹 Cleanup ${cleanupId}: Found ${activeRuns.length} active run(s), cancelling...`);
             
-            // Cancel all active runs in parallel
+            // Cancel all active runs with timeout protection
             const cancelPromises = activeRuns.map(async (activeRun) => {
+                const cancelTimeout = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error(`Cancel timeout for run ${activeRun.id}`)), 5000)
+                );
+                
                 try {
-                    await client.beta.threads.runs.cancel(threadId, activeRun.id);
-                    console.log(`✅ Cancelled run: ${activeRun.id} (status: ${activeRun.status})`);
-                    return true;
+                    await Promise.race([
+                        client.beta.threads.runs.cancel(threadId, activeRun.id),
+                        cancelTimeout
+                    ]);
+                    console.log(`✅ Cleanup ${cleanupId}: Cancelled run ${activeRun.id} (was: ${activeRun.status})`);
+                    return { id: activeRun.id, success: true };
                 } catch (cancelError) {
-                    console.warn(`⚠️ Failed to cancel run ${activeRun.id}:`, cancelError.message);
-                    return false;
+                    console.warn(`⚠️ Cleanup ${cleanupId}: Failed to cancel run ${activeRun.id}:`, cancelError.message);
+                    return { id: activeRun.id, success: false, error: cancelError.message };
                 }
             });
             
-            await Promise.all(cancelPromises);
+            const cancelResults = await Promise.allSettled(cancelPromises);
+            const successful = cancelResults.filter(r => r.status === 'fulfilled' && r.value.success).length;
             
-            // Wait for cancellations to take effect with exponential backoff
-            let waitTime = 1000; // Start with 1 second
-            const maxWaitTime = 10000; // Max 10 seconds total
+            console.log(`📊 Cleanup ${cleanupId}: Cancelled ${successful}/${activeRuns.length} runs`);
+            
+            // Wait for cancellations to take effect with adaptive timeout
+            const maxWaitTime = Math.min(activeRuns.length * 2000, 15000); // Max 15 seconds
             let totalWaitTime = 0;
+            let waitTime = 1000;
             
             while (totalWaitTime < maxWaitTime) {
                 await new Promise(resolve => setTimeout(resolve, waitTime));
                 totalWaitTime += waitTime;
                 
-                // Check if any runs are still active
-                const updatedRuns = await client.beta.threads.runs.list(threadId);
-                const stillActiveRuns = updatedRuns.data.filter(run => 
+                try {
+                    // Check status with timeout
+                    const statusTimeout = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Status check timeout')), 5000)
+                    );
+                    
+                    const updatedRuns = await Promise.race([
+                        client.beta.threads.runs.list(threadId, { limit: 10 }),
+                        statusTimeout
+                    ]);
+                    
+                    const stillActiveRuns = updatedRuns.data.filter(run => 
+                        ['running', 'queued', 'in_progress', 'requires_action'].includes(run.status)
+                    );
+                    
+                    if (stillActiveRuns.length === 0) {
+                        console.log(`✅ Cleanup ${cleanupId}: All runs successfully cancelled after ${totalWaitTime}ms`);
+                        return;
+                    }
+                    
+                    console.log(`⏳ Cleanup ${cleanupId}: ${stillActiveRuns.length} run(s) still active after ${totalWaitTime}ms`);
+                    waitTime = Math.min(waitTime * 1.3, 3000); // Adaptive backoff
+                    
+                } catch (statusError) {
+                    console.warn(`⚠️ Cleanup ${cleanupId}: Status check failed:`, statusError.message);
+                    break; // Exit wait loop on status check failure
+                }
+            }
+            
+            // Final verification
+            try {
+                const finalRuns = await client.beta.threads.runs.list(threadId, { limit: 5 });
+                const finalActiveRuns = finalRuns.data.filter(run => 
                     ['running', 'queued', 'in_progress', 'requires_action'].includes(run.status)
                 );
                 
-                if (stillActiveRuns.length === 0) {
-                    console.log('✅ All runs successfully cancelled');
-                    return;
+                if (finalActiveRuns.length > 0) {
+                    console.warn(`⚠️ Cleanup ${cleanupId}: ${finalActiveRuns.length} runs still active after ${totalWaitTime}ms`);
+                    // Don't throw error - let calling code decide how to handle
                 }
-                
-                console.log(`⏳ Still waiting... ${stillActiveRuns.length} run(s) still active (waited ${totalWaitTime}ms)`);
-                waitTime = Math.min(waitTime * 1.5, 3000); // Exponential backoff, max 3s per wait
-            }
-            
-            // Final check - if still active, throw error
-            const finalRuns = await client.beta.threads.runs.list(threadId);
-            const finalActiveRuns = finalRuns.data.filter(run => 
-                ['running', 'queued', 'in_progress', 'requires_action'].includes(run.status)
-            );
-            
-            if (finalActiveRuns.length > 0) {
-                console.error(`❌ Could not cancel all active runs after ${totalWaitTime}ms. ${finalActiveRuns.length} still active.`);
-                throw new Error(`Thread has ${finalActiveRuns.length} active runs that could not be cancelled. Please try again in a moment.`);
+            } catch (finalCheckError) {
+                console.warn(`⚠️ Cleanup ${cleanupId}: Final check failed:`, finalCheckError.message);
             }
             
         } catch (error) {
-            console.warn('⚠️ Error during run cleanup:', error.message);
+            console.error(`❌ Cleanup ${cleanupId} failed:`, error.message);
             throw error;
         }
     },
@@ -743,17 +998,26 @@ export const openAIService = {
         }
     },
 
-    // Helper method to add message with retry logic
+    // Enhanced message addition with intelligent retry and backoff
     addMessageWithRetry: async (client, threadId, message) => {
-        const maxRetries = 8; // Increased retries for production
+        const maxRetries = 5; // Reduced for faster failure detection
+        const baseWaitTime = 1000; // 1 second base
         let retryCount = 0;
         
         while (retryCount < maxRetries) {
             try {
-                await client.beta.threads.messages.create(threadId, {
-                    role: 'user',
-                    content: message
-                });
+                const addMessageTimeout = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Add message timeout')), 15000)
+                );
+                
+                await Promise.race([
+                    client.beta.threads.messages.create(threadId, {
+                        role: 'user',
+                        content: message
+                    }),
+                    addMessageTimeout
+                ]);
+                
                 console.log('✅ Message added to thread successfully');
                 return;
                 
@@ -761,48 +1025,64 @@ export const openAIService = {
                 retryCount++;
                 console.error(`❌ Attempt ${retryCount}/${maxRetries} failed:`, messageError.message);
                 
-                // Check for different types of errors
-                const isActiveRunError = messageError.message && 
-                    (messageError.message.includes('while a run') && messageError.message.includes('is active'));
+                // Enhanced error classification
+                const isActiveRunError = messageError.message?.includes('while a run') && 
+                                       messageError.message?.includes('is active');
                 const isRateLimitError = messageError.status === 429 || 
-                    messageError.message?.includes('rate limit') || 
-                    messageError.message?.includes('Rate limit');
+                                       messageError.message?.includes('rate limit');
                 const isServerError = messageError.status >= 500;
+                const isTimeoutError = messageError.message?.includes('timeout');
+                const isQuotaError = messageError.status === 402 || 
+                                   messageError.message?.includes('quota');
                 
-                if (isActiveRunError || isRateLimitError || isServerError) {
-                    // Calculate dynamic wait time based on error type
-                    let waitTime;
-                    if (isRateLimitError) {
-                        // Longer wait for rate limits
-                        waitTime = Math.min(Math.pow(2, retryCount) * 2000, 30000); // 4s, 8s, 16s, 30s max
-                    } else {
-                        // Standard exponential backoff
-                        waitTime = Math.min(Math.pow(2, retryCount) * 1000, 15000); // 2s, 4s, 8s, 15s max
-                    }
-                    
-                    console.log(`⚠️ ${isActiveRunError ? 'Active run' : isRateLimitError ? 'Rate limit' : 'Server error'} detected, retrying in ${waitTime/1000}s (attempt ${retryCount}/${maxRetries})`);
-                    
+                if (isQuotaError) {
+                    console.error('💳 Quota exceeded - not retrying');
+                    throw new Error('OpenAI quota exceeded. Please check your billing status.');
+                }
+                
+                if (isActiveRunError || isRateLimitError || isServerError || isTimeoutError) {
                     if (retryCount < maxRetries) {
+                        // Intelligent wait time calculation
+                        let waitTime;
+                        if (isRateLimitError) {
+                            // Respect rate limit headers if available
+                            const retryAfter = messageError.headers?.['retry-after'];
+                            waitTime = retryAfter ? parseInt(retryAfter) * 1000 : baseWaitTime * Math.pow(2, retryCount);
+                        } else if (isActiveRunError) {
+                            // Shorter wait for active run conflicts
+                            waitTime = baseWaitTime + (retryCount * 2000);
+                        } else {
+                            // Standard exponential backoff
+                            waitTime = baseWaitTime * Math.pow(1.8, retryCount);
+                        }
+                        
+                        waitTime = Math.min(waitTime, 30000); // Cap at 30 seconds
+                        
+                        const errorType = isActiveRunError ? 'Active run' : 
+                                        isRateLimitError ? 'Rate limit' : 
+                                        isServerError ? 'Server error' : 'Timeout';
+                        
+                        console.log(`⚠️ ${errorType} detected, retrying in ${waitTime/1000}s (attempt ${retryCount}/${maxRetries})`);
+                        
                         await new Promise(resolve => setTimeout(resolve, waitTime));
                         
-                        // Enhanced cleanup before retry
-                        if (isActiveRunError) {
+                        // Additional cleanup for active run errors
+                        if (isActiveRunError && retryCount > 1) {
                             try {
-                                console.log('🧹 Performing enhanced cleanup...');
-                                await openAIService.forceCleanupThread(client, threadId);
+                                console.log('🧹 Performing additional cleanup due to persistent active runs...');
+                                await openAIService.cleanupActiveRuns(client, threadId);
                             } catch (cleanupError) {
-                                console.warn('⚠️ Enhanced cleanup failed:', cleanupError.message);
+                                console.warn('⚠️ Additional cleanup failed:', cleanupError.message);
                             }
                         }
                     }
                 } else {
-                    // Different error, don't retry immediately but log for debugging
-                    console.error(`❌ Non-retryable error: ${messageError.message}`);
+                    // Unexpected error - log and retry a few times anyway
+                    console.error(`❌ Unexpected error (${messageError.status}): ${messageError.message}`);
                     
-                    // Still retry a few times in case it's a transient issue
-                    if (retryCount < 3) {
-                        const waitTime = 2000; // 2 second wait for non-retryable errors
-                        console.log(`⚠️ Attempting retry anyway in ${waitTime/1000}s...`);
+                    if (retryCount < 2) { // Only retry twice for unexpected errors
+                        const waitTime = baseWaitTime * retryCount;
+                        console.log(`⚠️ Retrying unexpected error in ${waitTime/1000}s...`);
                         await new Promise(resolve => setTimeout(resolve, waitTime));
                     } else {
                         throw messageError;
@@ -811,7 +1091,7 @@ export const openAIService = {
             }
         }
         
-        throw new Error(`Could not add message to thread after ${maxRetries} attempts. Thread may be permanently stuck - please try creating a new conversation.`);
+        throw new Error(`Failed to add message after ${maxRetries} attempts. Thread may be stuck - please try starting a new conversation.`);
     },
 
     // Helper method to execute run
@@ -967,7 +1247,7 @@ export const openAIService = {
 
     // Get or create assistant
     getOrCreateAssistant: async (language = 'fr') => {
-        const client = initializeOpenAI();
+        const client = await initializeOpenAI();
         if (!client) {
             throw new Error('OpenAI not configured');
         }
@@ -1599,7 +1879,7 @@ export const openAIService = {
 
     // Method to diagnose and potentially fix thread issues
     diagnoseThread: async (threadId) => {
-        const client = initializeOpenAI();
+        const client = await initializeOpenAI();
         if (!client) return { status: 'error', message: 'OpenAI not configured' };
 
         try {

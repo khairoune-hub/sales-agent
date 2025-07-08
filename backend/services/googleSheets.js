@@ -110,7 +110,7 @@ const initializeGoogleSheets = async () => {
 
 // Helper function to get spreadsheet ID
 const getSpreadsheetId = () => {
-    return process.env.GOOGLE_SHEETS_SPREADSHEET_ID || process.env.GOOGLE_SHEET_ID || '1gQUIKFwP1zNLYOnF_3Gc4u9X9WnZSpsS9KT31sW2jjA';
+    return process.env.GOOGLE_SHEETS_SPREADSHEET_ID || process.env.GOOGLE_SHEET_ID || '1kFwIOYio_eIHWhtR0pplnhfzBjtqMoY-r5TWaeqiXfA';
 };
 
 export const googleSheetsService = {
